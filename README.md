@@ -52,6 +52,8 @@ agentbox logs dev -f                          # follow its output
 agentbox kill dev                             # stop it and everything it started
 ```
 
+Pin it to your taskbar: the installers add agentbox to the Start menu (or your Linux applications menu). From a source build, run `agentbox shortcut`.
+
 Have your agents use agentbox for long-running commands:
 
 ```sh

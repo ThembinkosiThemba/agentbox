@@ -151,7 +151,7 @@ func newModel(st *store.Store, hooks Hooks) *model {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(m.load(true), frameTick())
+	return tea.Batch(tea.SetWindowTitle("agentbox"), m.load(true), frameTick())
 }
 
 func frameTick() tea.Cmd {

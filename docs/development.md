@@ -34,8 +34,23 @@ GOOS=darwin go vet ./...
 | `internal/claude` | Read-only, incremental parser for Claude Code transcripts |
 | `internal/tui` | The dashboard (Bubble Tea and Lip Gloss) |
 | `internal/human` | Formatting of durations, times and sizes |
+| `internal/launcher` | `agentbox shortcut`: Start menu shortcut, Linux desktop entry, macOS `.command` |
+| `tools/genicon` | Draws the app icon from code and writes `assets/icon/` and `internal/launcher/icon.png` |
+| `winres/`, `rsrc_windows_*.syso` | Windows resources (icon, version info) linked into `agentbox.exe` |
 
 The rules contributors need to keep are in [AGENTS.md](../AGENTS.md).
+
+## The icon
+
+The icon is drawn in code, so every size is rendered from shapes rather than scaled down, and small sizes drop detail that would blur. After changing `tools/genicon`:
+
+```sh
+go run ./tools/genicon -preview /tmp/icons.png    # writes the icons, plus an enlarged sheet to check small sizes
+go install github.com/tc-hib/go-winres@v0.3.3
+go-winres make --arch amd64,arm64 --product-version dev --file-version dev
+```
+
+Commit the regenerated `.syso` files. `go build` links them into Windows builds automatically; other platforms ignore them. The release workflow regenerates them with the tag's version.
 
 ## Tests
 

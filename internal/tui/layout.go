@@ -78,10 +78,14 @@ func panel(title, right string, lines []string, w, h int, focused bool) string {
 type row struct {
 	glyph      string
 	glyphColor lipgloss.TerminalColor
+	badge      string // short tag before the title, e.g. "agentbox"
 	title      string
+	hint       string // faint text after the title, when there is room
 	right      string
 	sub        string
 	subRight   string
+
+	subColor, subRightColor lipgloss.TerminalColor // default muted, faint
 }
 
 // renderList draws rows into w×h cells, keeping sel visible by adjusting
@@ -143,12 +147,30 @@ func renderRow(r row, w int, selected, focused bool) []string {
 
 	avail := w - 4
 	right := trunc(r.right, max(avail/3, 0))
-	title := trunc(oneLine(r.title), max(avail-width(right)-1, 0))
-	l1 := bar + glyph + seg(titleStyle, title) + pad(avail-width(title)-width(right)) + seg(sMuted, right)
+	room := max(avail-width(right)-1, 0)
+	badge := ""
+	if r.badge != "" && room > 24 {
+		badge = seg(sBadge, "▣ "+r.badge) + pad(1)
+		room -= width(badge)
+	}
+	title := trunc(oneLine(r.title), room)
+	hint := ""
+	if h := oneLine(r.hint); h != "" && room-width(title) > 8 {
+		hint = seg(sFaint, " "+trunc(h, room-width(title)-1))
+	}
+	l1 := bar + glyph + badge + seg(titleStyle, title) + hint +
+		pad(avail-width(badge)-width(title)-width(hint)-width(right)) + seg(sMuted, right)
 
+	subStyle, subRightStyle := sMuted, sFaint
+	if r.subColor != nil {
+		subStyle = fg(r.subColor)
+	}
+	if r.subRightColor != nil {
+		subRightStyle = fg(r.subRightColor)
+	}
 	subRight := trunc(r.subRight, max(avail/3, 0))
 	sub := trunc(oneLine(r.sub), max(avail-width(subRight)-1, 0))
-	l2 := bar + pad(2) + seg(sMuted, sub) + pad(avail-width(sub)-width(subRight)) + seg(sFaint, subRight)
+	l2 := bar + pad(2) + seg(subStyle, sub) + pad(avail-width(sub)-width(subRight)) + seg(subRightStyle, subRight)
 	return []string{l1, l2}
 }
 

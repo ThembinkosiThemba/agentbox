@@ -47,8 +47,11 @@ const (
 )
 
 type Run struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name,omitempty"`
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+	// Title is a human-readable description of what the run is for, e.g.
+	// "Run the e2e suite". It is only shown, never used to find the run.
+	Title   string   `json:"title,omitempty"`
 	Command []string `json:"command"`
 	// UseShell runs Command through the platform shell instead of exec'ing it.
 	UseShell bool `json:"use_shell"`
@@ -77,8 +80,11 @@ type Run struct {
 	RestartOf string `json:"restart_of,omitempty"`
 }
 
-// DisplayName is the name if set, otherwise the command line.
+// DisplayName is the title, else the name, else the command line.
 func (r *Run) DisplayName() string {
+	if r.Title != "" {
+		return r.Title
+	}
 	if r.Name != "" {
 		return r.Name
 	}

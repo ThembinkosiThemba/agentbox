@@ -13,6 +13,9 @@ internal/proc               platform code: proc_windows.go (Job Objects), proc_u
 internal/claude             read-only, incremental parser for ~/.claude/projects/*/*.jsonl
 internal/tui                Bubble Tea dashboard: tui.go (model/update), view.go, layout.go, styles.go
 internal/human              duration/time/size formatting
+internal/launcher           `agentbox shortcut`: Start menu .lnk (via PowerShell), Linux .desktop, macOS .command
+tools/genicon               draws the icon in code -> assets/icon/, internal/launcher/icon.png
+winres/, rsrc_windows_*.syso    icon + version resources linked into agentbox.exe (regenerate with go-winres)
 ```
 
 ## Invariants
@@ -39,4 +42,4 @@ Style: standard gofmt, small packages, comments only where the reason isn't obvi
 
 `.github/workflows/release.yml` runs on `v*` tags: it reuses `ci.yml` (tests on Linux, Windows and macOS), then builds `CGO_ENABLED=0` binaries for linux, darwin and windows on amd64 and arm64, and publishes them with `checksums.txt`. The version comes from the tag via `-X agentbox/internal/cli.Version`. Keep the code pure Go (no cgo) so cross-compiling keeps working.
 
-`install.sh` (Linux/macOS, POSIX sh, shellcheck-clean) and `install.ps1` (Windows PowerShell 5.1+) download a release binary, verify it against `checksums.txt` and set up PATH. Both read the same `AGENTBOX_*` variables; keep them in step.
+`install.sh` (Linux/macOS, POSIX sh, shellcheck-clean) and `install.ps1` (Windows PowerShell 5.1+) download a release binary, verify it against `checksums.txt` and set up PATH. Both read the same `AGENTBOX_*` variables; keep them in step. Both finish by running `agentbox shortcut` (skipped with `AGENTBOX_NO_SHORTCUT=1`, and on Linux machines without a desktop).

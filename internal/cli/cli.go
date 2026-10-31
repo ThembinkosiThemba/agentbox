@@ -17,6 +17,7 @@ import (
 
 	"agentbox/internal/claude"
 	"agentbox/internal/human"
+	"agentbox/internal/launcher"
 	"agentbox/internal/store"
 	"agentbox/internal/supervisor"
 	"agentbox/internal/tui"
@@ -56,6 +57,7 @@ func init() {
 		{"prune", nil, "[--older-than 24h]", "Delete all finished runs", cmdPrune},
 		{"sessions", nil, "[id] [--json] [--days 3]", "List Claude Code sessions, or show one", cmdSessions},
 		{"guide", nil, "", "Print instructions to give coding agents (for CLAUDE.md / AGENTS.md)", cmdGuide},
+		{"shortcut", nil, "[--desktop] [--remove]", "Add agentbox to the Start menu / app launcher, to pin it", cmdShortcut},
 		{"tui", []string{"ui"}, "", "Open the dashboard (default with no command)", cmdTUI},
 		{"version", nil, "", "Print the version", func(*store.Store, []string) int { fmt.Println("agentbox", Version); return 0 }},
 	}
@@ -121,6 +123,7 @@ func cmdRun(st *store.Store, args []string) int {
 	fs := newFlags("run")
 	detach := fs.boolVar(false, "Start in the background and return immediately", "d", "detach")
 	name := fs.stringVar("", "A name to find the run by", "n", "name")
+	title := fs.stringVar("", "What the run is for, shown in the dashboard (e.g. \"Run e2e tests\")", "title")
 	timeout := fs.durationVar(0, "Stop the run after this long (e.g. 30m)", "t", "timeout")
 	cwd := fs.stringVar("", "Working directory (default: current)", "C", "cwd")
 	forceShell := fs.boolVar(false, "Run through the shell even with several arguments", "s", "shell")
@@ -142,7 +145,7 @@ func cmdRun(st *store.Store, args []string) int {
 	useShell := (len(argv) == 1 || *forceShell) && !*noShell
 
 	r, err := supervisor.Create(st, supervisor.Options{
-		Name: *name, Argv: argv, UseShell: useShell, Cwd: *cwd, Timeout: *timeout, Detach: *detach,
+		Name: *name, Title: *title, Argv: argv, UseShell: useShell, Cwd: *cwd, Timeout: *timeout, Detach: *detach,
 	})
 	if err != nil {
 		return die(err)
@@ -256,6 +259,7 @@ func cmdStatus(st *store.Store, args []string) int {
 			fmt.Printf("  %-9s %s\n", dim(k), v)
 		}
 	}
+	row("title", r.Title)
 	row("name", r.Name)
 	row("command", r.CommandLine())
 	row("cwd", r.Cwd)
@@ -425,7 +429,7 @@ func Restart(st *store.Store, old *store.Run) (*store.Run, error) {
 		}
 	}
 	r, err := supervisor.Create(st, supervisor.Options{
-		Name: old.Name, Argv: old.Command, UseShell: old.UseShell, Cwd: old.Cwd,
+		Name: old.Name, Title: old.Title, Argv: old.Command, UseShell: old.UseShell, Cwd: old.Cwd,
 		Timeout: time.Duration(old.TimeoutSec) * time.Second, Detach: true, RestartOf: old.ID,
 	})
 	if err != nil {
@@ -602,12 +606,13 @@ take more than about a minute (builds, test suites, installs, migrations, dev se
 instead of running it directly or with run_in_background.
 
 ` + "```" + `sh
-agentbox run -d --name build -- "npm run build"   # start detached; prints the run id
-agentbox wait build --timeout 8m                   # block until done; exits with the command's code
-agentbox logs build -n 50                          # last 50 lines of output (-f to follow)
-agentbox status build                              # status, exit code, duration
-agentbox kill build                                # stop it and everything it started
-agentbox ls                                        # all runs
+agentbox run -d --name build --title "Build the web app" -- "npm run build"
+                                     # start detached; prints the run id
+agentbox wait build --timeout 8m     # block until done; exits with the command's code
+agentbox logs build -n 50            # last 50 lines of output (-f to follow)
+agentbox status build                # status, exit code, duration
+agentbox kill build                  # stop it and everything it started
+agentbox ls                          # all runs
 ` + "```" + `
 
 - A single quoted argument runs through the shell (pipes, &&, env vars work).
@@ -618,10 +623,46 @@ agentbox ls                                        # all runs
   A run that was stopped exits 137.
 - Start dev servers with ` + "`run -d`" + ` and leave them running; the user can see and stop them.
 - Names are reusable: the newest run with a name wins.
+- Give every run a short ` + "`--title`" + ` saying what it is for, in plain words. The user reads
+  it in the dashboard; the name is for you to refer to the run.
 `
 
 func cmdGuide(*store.Store, []string) int {
 	fmt.Print(guide)
+	return 0
+}
+
+func cmdShortcut(_ *store.Store, args []string) int {
+	fs := newFlags("shortcut")
+	desktop := fs.boolVar(false, "Also add one to the desktop (Windows)", "desktop")
+	remove := fs.boolVar(false, "Remove the shortcuts instead", "remove")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	exe, err := launcher.Executable()
+	if err != nil {
+		return die(err)
+	}
+	if !*remove && launcher.Temporary(exe) {
+		return die(fmt.Errorf("%s looks like a temporary build; install agentbox first (go install . or the installer)", exe))
+	}
+	res, err := launcher.Install(exe, launcher.Options{Desktop: *desktop, Remove: *remove})
+	if err != nil {
+		return die(err)
+	}
+	verb := "added"
+	if *remove {
+		verb = "removed"
+	}
+	if len(res.Paths) == 0 {
+		fmt.Println("nothing to remove")
+	}
+	for _, p := range res.Paths {
+		fmt.Println(verb, p)
+	}
+	if res.Hint != "" {
+		fmt.Println(dim(res.Hint))
+	}
 	return 0
 }
 

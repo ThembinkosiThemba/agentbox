@@ -10,14 +10,14 @@ The header shows the two tabs and, on the right:
 
 ## Runs tab
 
-Every command started through `agentbox run`, with running ones first. Each row shows status, name or command, duration, id, who launched it, and exit code if it failed.
+Every command started through `agentbox run`, with running ones first. Each row shows status, the run's title (or name, or command), duration, then its id, name, project folder and command, who launched it and when. A failed run shows its exit code in red instead.
 
 The details pane for the selected run shows:
 
 - status and duration
 - the full command
 - working directory and start/end times
-- who launched it (agent and session)
+- who launched it, with the Claude session's title when it came from one
 - process id and shell
 - timeout, and the run it restarted, if any
 - a live tail of the output
@@ -41,14 +41,17 @@ The summary pane shows:
 
 - project, branch, model and client
 - prompts, turns, tokens and cost
-- the most-used tools
+- **commands over time**: a sparkline of when the session ran commands, red where one failed and yellow where one is still running
+- **tool mix**: one strip showing how the session split its tool calls, with a legend. MCP tools are grouped by server
 - background tasks
-- the most recent commands
+- the most recent commands, with the time each started, Claude's description of it and how long it took, and a count of how many succeeded and failed
 - the command to resume the session
+
+Commands that call agentbox are marked with ▣ and read by what they do, e.g. `run · Build the web app` or `wait · Build the web app`, using the run's `--title` (or name).
 
 Press `Enter` on a session to open it. The list then holds the session's background tasks first, then every shell command it ran (Bash or PowerShell), newest first. Leading `cd <project> &&` prefixes are hidden in the list to keep it readable.
 
-- **Command** details: result (OK, ERROR, INTERRUPTED, RUNNING), duration, description, the full command, and its output as Claude received it.
+- **Command** details: result (OK, ERROR, INTERRUPTED, RUNNING), duration, description, the full command, and its output as Claude received it. A failed command's row shows its exit code and first line of error output. For an agentbox call, the details also show the run it started or waited on, with its live status.
 - **Background task** details: status, exit code, the command, Claude's completion summary, and a live tail of the task's output file. Press `Enter` again to view the output full screen.
 
 A task shows **unknown** when Claude never recorded a completion notice, usually because the session ended first.

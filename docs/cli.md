@@ -19,6 +19,7 @@ Runs a command under agentbox. Without `-d` it runs in the foreground: output st
 | --- | --- |
 | `-d`, `--detach` | Start in the background and return immediately |
 | `-n`, `--name <name>` | A name to refer to the run by |
+| `--title <text>` | What the run is for, in plain words; shown in the dashboard and `ls` instead of the command |
 | `-t`, `--timeout <duration>` | Stop the run after this long, e.g. `30m`, `2h` |
 | `-C`, `--cwd <dir>` | Working directory (default: current) |
 | `-s`, `--shell` | Run through the shell even with several arguments |
@@ -134,6 +135,22 @@ agentbox guide
 
 Prints instructions for coding agents, ready to add to `CLAUDE.md` or `AGENTS.md`. See [Using agentbox with coding agents](agents.md).
 
+## shortcut
+
+```
+agentbox shortcut [--desktop] [--remove]
+```
+
+Adds agentbox to your system's app launcher, so the dashboard opens like any other app and can be pinned:
+
+| System | What it adds |
+| --- | --- |
+| Windows | An **agentbox** Start menu shortcut with the agentbox icon. Right-click it and choose **Pin to taskbar**. `--desktop` adds one to the desktop too |
+| Linux | `~/.local/share/applications/agentbox.desktop` and its icon; it opens in your terminal |
+| macOS | `~/Applications/agentbox.command`, which opens agentbox in Terminal; drag it to the Dock |
+
+The launcher points at the `agentbox` binary you ran the command with. The install scripts run it for you. `--remove` deletes what it added.
+
 ## version
 
 ```
@@ -163,5 +180,6 @@ A stopped process's raw exit code is never passed through. On Windows it is an N
 | `AGENTBOX_HOME` | Where runs are stored (see [how it works](how-it-works.md#state-on-disk)) |
 | `AGENTBOX_SHELL` | The shell used for single-argument commands |
 | `AGENTBOX_AGENT` | The agent name recorded on runs started from this environment |
+| `AGENTBOX_NO_SHORTCUT` | Set to `1` to have the install scripts skip `agentbox shortcut` |
 | `CLAUDE_CONFIG_DIR` | Where to find Claude Code's data (default `~/.claude`) |
 | `AGENTBOX_RUN_ID` | Set by agentbox inside every run, to that run's id |

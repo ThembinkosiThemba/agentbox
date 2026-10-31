@@ -25,7 +25,7 @@ func fixture(t *testing.T) *model {
 	m := newModel(st, Hooks{Version: "test"})
 	m.loaded = true
 	m.runs = []*store.Run{
-		{ID: "k3x9p2", Name: "dev server", Command: []string{"npm run dev -- --port 5173"}, UseShell: true, Cwd: `C:\code\app`,
+		{ID: "k3x9p2", Name: "dev", Title: "Vite dev server for the web app", Command: []string{"npm run dev -- --port 5173"}, UseShell: true, Cwd: `C:\code\app`,
 			Status: store.StatusRunning, CreatedAt: start, StartedAt: &start, PID: 4242, Agent: "claude-code", SessionID: "c39bfc8a-8239"},
 		{ID: "a8b2c1", Command: []string{"go", "test", "./..."}, Cwd: "/home/me/app", Status: store.StatusFailed,
 			CreatedAt: start, StartedAt: &start, EndedAt: &now, ExitCode: &code},
@@ -36,6 +36,11 @@ func fixture(t *testing.T) *model {
 		ToolCounts: map[string]int{"Bash": 24, "Read": 9, "Edit": 5},
 		Execs: []*claude.Exec{
 			{ToolUseID: "t1", Tool: "Bash", Command: "go build ./...", Description: "Build", Start: start, End: now, Output: "ok"},
+			{ToolUseID: "t3", Tool: "Bash", Command: `cd /c/code && agentbox run -d --name dev --title "Vite dev server for the web app" -- "npm run dev"`,
+				Start: start, End: start.Add(time.Second), Output: "k3x9p2 started (pid 4242): Vite dev server"},
+			{ToolUseID: "t4", Tool: "Bash", Command: "agentbox wait dev --timeout 8m", Start: start.Add(time.Minute), End: now},
+			{ToolUseID: "t5", Tool: "Bash", Command: "go vet ./...", Description: "Vet", Start: start.Add(2 * time.Minute), End: now,
+				IsError: true, Output: "Exit code 1\n\n# agentbox/internal/tui\nview.go:6:2: imported and not used"},
 			{ToolUseID: "t2", Tool: "Bash", Command: "go test ./...\nsecond line", Start: now},
 		},
 		Tasks: []*claude.Task{{ID: "b39ed3n6g", Command: "npm run build", Description: "Build site", Start: start, End: now,
@@ -56,6 +61,7 @@ func TestViewFitsTerminal(t *testing.T) {
 			"session": func(m *model) { m.switchTab(tabClaude); m.open() },
 			"task":    func(m *model) { m.switchTab(tabClaude); m.open(); m.open() },
 			"command": func(m *model) { m.switchTab(tabClaude); m.open(); m.move(1) },
+			"abcall":  func(m *model) { m.switchTab(tabClaude); m.open(); m.move(4) },
 			"log":     func(m *model) { m.open() },
 			"help":    func(m *model) { m.overlay = ovHelp },
 			"confirm": func(m *model) { m.ask("Stop k3x9p2 (dev server) and everything it started?", nil) },
@@ -75,7 +81,7 @@ func TestViewFitsTerminal(t *testing.T) {
 					t.Errorf("%dx%d %s: line %d is %d wide: %q", sz[0], sz[1], name, i, w, ansi.Strip(l))
 				}
 			}
-			if os.Getenv("AGENTBOX_DUMP") != "" && sz[0] == 160 && (name == "claude" || name == "session" || name == "command" || name == "confirm") {
+			if os.Getenv("AGENTBOX_DUMP") != "" && sz[0] == 160 && (name == "runs" || name == "claude" || name == "session" || name == "abcall") {
 				t.Logf("\n%s", ansi.Strip(out))
 			}
 		}

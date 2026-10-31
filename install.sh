@@ -7,6 +7,7 @@
 #   AGENTBOX_VERSION          version to install, e.g. 0.2.0 (default: latest)
 #   AGENTBOX_INSTALL_DIR      where to put the binary (default: ~/.local/bin)
 #   AGENTBOX_NO_MODIFY_PATH   set to 1 to leave shell config files alone
+#   AGENTBOX_NO_SHORTCUT      set to 1 to skip adding agentbox to the applications menu (Linux)
 #   AGENTBOX_BASE_URL         download from this URL instead of GitHub releases
 set -eu
 
@@ -73,6 +74,7 @@ main() {
 	say "Installed $dir/agentbox"
 
 	setup_path "$dir"
+	setup_shortcut "$dir"
 
 	say ""
 	"$dir/agentbox" version 2>/dev/null || true
@@ -134,6 +136,18 @@ setup_path() {
 		say "Added $dir to PATH in $f"
 	done
 	say "Open a new terminal, or run:  $line"
+}
+
+# setup_shortcut adds agentbox to the applications menu on Linux desktops,
+# so it can be pinned to a dock or panel. Servers without a desktop are
+# skipped.
+setup_shortcut() {
+	[ "$(uname -s)" = Linux ] || return 0
+	[ "${AGENTBOX_NO_SHORTCUT:-}" = 1 ] && return 0
+	[ -n "${XDG_CURRENT_DESKTOP:-}${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || return 0
+	if "$1/agentbox" shortcut >/dev/null 2>&1; then
+		say "Added agentbox to your applications menu"
+	fi
 }
 
 main "$@"

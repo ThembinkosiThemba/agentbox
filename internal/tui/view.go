@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -182,23 +181,20 @@ func (m *model) viewRuns(w, h int) string {
 		rows := make([]row, len(runs))
 		for i, r := range runs {
 			glyph, c, _ := m.runLook(r.Status)
-			by := r.Agent
-			if by == "" {
-				by = "you"
+			parts := []string{r.ID}
+			if r.Name != "" && r.Title != "" {
+				parts = append(parts, r.Name)
 			}
-			sub := r.ID + " · " + by + " · " + human.Ago(r.CreatedAt, m.now)
-			title := r.DisplayName()
-			if r.Name != "" {
-				sub = r.ID + " · " + oneLine(r.CommandLine())
+			parts = append(parts, baseName(r.Cwd))
+			if r.Title != "" || r.Name != "" {
+				parts = append(parts, oneLine(r.CommandLine()))
 			}
-			subRight := ""
+			rw := row{glyph: glyph, glyphColor: c, title: r.DisplayName(), right: human.Duration(r.Duration(m.now)),
+				sub: strings.Join(parts, " · "), subRight: whoShort(r.Agent) + " · " + human.Ago(r.CreatedAt, m.now)}
 			if x := r.ExitText(); x != "" && x != "0" {
-				subRight = "exit " + x
-			} else if r.Name != "" {
-				subRight = human.Ago(r.CreatedAt, m.now)
+				rw.subRight, rw.subRightColor = "exit "+x, cRed
 			}
-			rows[i] = row{glyph: glyph, glyphColor: c, title: title, right: human.Duration(r.Duration(m.now)),
-				sub: sub, subRight: subRight}
+			rows[i] = rw
 		}
 		listLines = renderList(rows, m.runSel, &m.runOff, lw-4, lh-2, true)
 	}
@@ -242,6 +238,9 @@ func (m *model) runDetail(r *store.Run, w, h int) []string {
 		head += sMuted.Render("  exit " + x)
 	}
 	lines := []string{head, ""}
+	if r.Title != "" {
+		lines = append(lines, sBold.Render(trunc(r.Title, w)))
+	}
 	for i, l := range wrap([]string{r.CommandLine()}, w-2) {
 		if i == 3 {
 			lines = append(lines, sFaint.Render("  …"))
@@ -260,6 +259,9 @@ func (m *model) runDetail(r *store.Run, w, h int) []string {
 			lines = append(lines, sMuted.Render(fmt.Sprintf("%-8s", k))+sText.Render(trunc(v, w-8)))
 		}
 	}
+	if r.Title != "" {
+		kv("name", r.Name)
+	}
 	kv("cwd", r.Cwd)
 	started := human.Clock(r.CreatedAt, m.now)
 	if r.EndedAt != nil {
@@ -269,7 +271,9 @@ func (m *model) runDetail(r *store.Run, w, h int) []string {
 	by := "you"
 	if r.Agent != "" {
 		by = r.Agent
-		if r.SessionID != "" {
+		if s := m.sessionByID(r.SessionID); s != nil {
+			by += sMuted.Render(" · ") + s.DisplayTitle()
+		} else if r.SessionID != "" {
 			by += sMuted.Render(" · session ") + short(r.SessionID)
 		}
 	}
@@ -296,8 +300,7 @@ func (m *model) runDetail(r *store.Run, w, h int) []string {
 
 // appendOutput fills the rest of a pane with the tail of the preview log.
 func (m *model) appendOutput(lines []string, w, h int, label, empty string) []string {
-	rule := sFaint.Render("── ") + sMuted.Render(label) + " " + sFaint.Render(strings.Repeat("─", max(w-width(label)-4, 0)))
-	lines = append(lines, rule)
+	lines = append(lines, section(label, "", w))
 	room := h - len(lines)
 	if room <= 0 {
 		return lines[:h]
@@ -397,53 +400,67 @@ func (m *model) sessionSummary(s *claude.Session, w, h int) []string {
 	kv("usage", usage)
 	lines = append(lines, "")
 
-	section := func(name string) {
-		lines = append(lines, sFaint.Render("── ")+sMuted.Render(name)+" "+sFaint.Render(strings.Repeat("─", max(w-width(name)-4, 0))))
+	if act := m.activity(s, w); act != nil {
+		lines = append(lines, section("commands over time", "", w))
+		lines = append(lines, act...)
+		lines = append(lines, "")
 	}
-
-	if len(s.Tasks) > 0 {
-		section(fmt.Sprintf("background tasks (%d)", len(s.Tasks)))
-		for i := len(s.Tasks) - 1; i >= 0 && i >= len(s.Tasks)-4; i-- {
-			t := s.Tasks[i]
-			g, c, _ := m.taskLook(t.State(s, m.now))
-			d := human.Duration(t.Duration(s, m.now))
-			lines = append(lines, lipgloss.NewStyle().Foreground(c).Render(g)+" "+
-				sText.Render(fit(taskTitle(t), w-width(d)-3))+" "+sMuted.Render(d))
+	if mix := toolMix(s.ToolCounts, w); mix != nil {
+		total := 0
+		for _, n := range s.ToolCounts {
+			total += n
 		}
+		lines = append(lines, section("tool mix", sMuted.Render(itoa(total)+" calls"), w))
+		lines = append(lines, mix...)
 		lines = append(lines, "")
 	}
 
-	if len(s.ToolCounts) > 0 {
-		section("tools")
-		type tc struct {
-			name string
-			n    int
+	if len(s.Tasks) > 0 {
+		running := s.RunningTasks(m.now)
+		note := ""
+		if running > 0 {
+			note = sYellow.Render(itoa(running) + " running")
 		}
-		var tcs []tc
-		for k, v := range s.ToolCounts {
-			tcs = append(tcs, tc{k, v})
-		}
-		sort.Slice(tcs, func(i, j int) bool { return tcs[i].n > tcs[j].n || (tcs[i].n == tcs[j].n && tcs[i].name < tcs[j].name) })
-		if len(tcs) > 5 {
-			tcs = tcs[:5]
-		}
-		barW := max(w-24, 4)
-		for _, t := range tcs {
-			n := max(t.n*barW/tcs[0].n, 1)
-			lines = append(lines, sText.Render(fit(t.name, 14))+" "+sAccent.Render(strings.Repeat("━", n))+" "+sMuted.Render(itoa(t.n)))
+		lines = append(lines, section(fmt.Sprintf("background tasks · %d", len(s.Tasks)), note, w))
+		for i := len(s.Tasks) - 1; i >= 0 && i >= len(s.Tasks)-4; i-- {
+			t := s.Tasks[i]
+			g, c, _ := m.taskLook(t.State(s, m.now))
+			hint := ""
+			if t.Description != "" && t.Command != "" {
+				hint = oneLine(claude.ShortCommand(t.Command))
+			}
+			lines = append(lines, m.cmdLine(t.Start, g, c, "", taskTitle(t), hint, human.Duration(t.Duration(s, m.now)), w))
 		}
 		lines = append(lines, "")
 	}
 
 	if len(s.Execs) > 0 {
-		section(fmt.Sprintf("recent commands (%d)", len(s.Execs)))
+		ok, failed, stopped := 0, 0, 0
+		for _, e := range s.Execs {
+			switch {
+			case !e.Done():
+			case e.Interrupted:
+				stopped++
+			case e.IsError:
+				failed++
+			default:
+				ok++
+			}
+		}
+		note := sGreen.Render("✓ " + itoa(ok))
+		if failed > 0 {
+			note += "  " + sRed.Render("✗ "+itoa(failed))
+		}
+		if stopped > 0 {
+			note += "  " + sMuted.Render("■ "+itoa(stopped))
+		}
+		lines = append(lines, section(fmt.Sprintf("recent commands · %d", len(s.Execs)), note, w))
 		room := h - len(lines) - 2
 		for i := len(s.Execs) - 1; i >= 0 && room > 0; i-- {
 			e := s.Execs[i]
 			g, c := m.execLook(e)
-			d := human.Duration(e.Duration(m.now))
-			lines = append(lines, lipgloss.NewStyle().Foreground(c).Render(g)+" "+
-				sText.Render(fit(oneLine(claude.ShortCommand(e.Command)), w-width(d)-3))+" "+sMuted.Render(d))
+			badge, title, hint := m.execLabel(e)
+			lines = append(lines, m.cmdLine(e.Start, g, c, badge, title, hint, human.Duration(e.Duration(m.now)), w))
 			room--
 		}
 	}
@@ -451,7 +468,7 @@ func (m *model) sessionSummary(s *claude.Session, w, h int) []string {
 		for len(lines) < h-1 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, sFaint.Render("resume: ")+sMuted.Render("claude --resume "+s.ID))
+		lines = append(lines, sFaint.Render("resume  ")+sMuted.Render("claude --resume "+s.ID))
 	}
 	return lines
 }
@@ -488,13 +505,19 @@ func (m *model) viewSession(w, h int) string {
 			}
 			e := it.exec
 			g, c := m.execLook(e)
-			short := oneLine(claude.ShortCommand(e.Command))
-			title, sub := short, e.Tool
-			if e.Description != "" {
-				title, sub = e.Description, e.Tool+" · "+short
+			badge, title, hint := m.execLabel(e)
+			sub := e.Tool
+			if hint != "" || badge != "" || e.Description != "" {
+				sub += " · " + oneLine(claude.ShortCommand(e.Command))
 			}
-			rows[i] = row{glyph: g, glyphColor: c, title: title, right: human.Duration(e.Duration(m.now)),
+			rw := row{glyph: g, glyphColor: c, badge: badge, title: title, right: human.Duration(e.Duration(m.now)),
 				sub: sub, subRight: human.Clock(e.Start, m.now)}
+			if e.IsError && e.Done() {
+				if l := errorLine(e.Output); l != "" {
+					rw.sub, rw.subColor = l, cRed
+				}
+			}
+			rows[i] = rw
 		}
 		listLines = renderList(rows, m.detSel, &m.detOff, lw-4, lh-2, true)
 	}
@@ -579,10 +602,14 @@ func (m *model) execDetail(e *claude.Exec, w, h int) []string {
 	if e.Description != "" {
 		lines = append(lines, sText.Render(trunc(e.Description, w)))
 	}
+	if r := m.callRun(e); r != nil {
+		g, c, label := m.runLook(r.Status)
+		lines = append(lines, sBadge.Render("▣ agentbox ")+fg(c).Render(g+" "+strings.ToLower(label))+" "+
+			sText.Render(trunc(r.ID+" · "+r.DisplayName(), w-width(label)-16)))
+	}
 	lines = append(lines, m.commandLines(e.Command, w, 8)...)
 	lines = append(lines, "")
-	rule := sFaint.Render("── ") + sMuted.Render("result") + " " + sFaint.Render(strings.Repeat("─", max(w-10, 0)))
-	lines = append(lines, rule)
+	lines = append(lines, section("result", "", w))
 	out := strings.TrimSpace(e.Output)
 	if out == "" {
 		if e.Done() {
@@ -741,6 +768,47 @@ func overlayOn(bg, fg string, w, h int) string {
 		}
 	}
 	return strings.Join(bgLines[:h], "\n")
+}
+
+// callRun is the agentbox run a command started or referred to, if it is
+// still on record. `run -d` prints the new id first, which identifies runs
+// started without a name.
+func (m *model) callRun(e *claude.Exec) *store.Run {
+	c := parseAgentbox(claude.ShortCommand(e.Command))
+	if c == nil {
+		return nil
+	}
+	if c.sub == "run" {
+		if f := strings.Fields(e.Output); len(f) > 0 {
+			if r := m.runByID(f[0]); r != nil {
+				return r
+			}
+		}
+		return findRun(m.runs, c.name)
+	}
+	return findRun(m.runs, c.ref)
+}
+
+func whoShort(agent string) string {
+	switch agent {
+	case "":
+		return "you"
+	case "claude-code":
+		return "claude"
+	}
+	return agent
+}
+
+func (m *model) sessionByID(id string) *claude.Session {
+	if id == "" {
+		return nil
+	}
+	for _, s := range m.sessions {
+		if s.ID == id {
+			return s
+		}
+	}
+	return nil
 }
 
 func short(id string) string {

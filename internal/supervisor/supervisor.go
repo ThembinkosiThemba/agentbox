@@ -26,6 +26,7 @@ const KillGrace = 5 * time.Second
 
 type Options struct {
 	Name      string
+	Title     string
 	Argv      []string
 	UseShell  bool
 	Cwd       string
@@ -49,6 +50,7 @@ func Create(st *store.Store, o Options) (*store.Run, error) {
 	}
 	r := &store.Run{
 		Name:       o.Name,
+		Title:      o.Title,
 		Command:    o.Argv,
 		UseShell:   o.UseShell,
 		Cwd:        cwd,

@@ -21,17 +21,19 @@ agentbox guide >> AGENTS.md             # one project, Codex and other agents
 ## The pattern agents follow
 
 ```sh
-agentbox run -d --name build -- "npm run build"   # start detached; returns at once with the run id
-agentbox wait build --timeout 8m                   # block until done; exits with the command's code
-agentbox logs build -n 50                          # last 50 lines of output
-agentbox status build                              # status, exit code, duration
-agentbox kill build                                # stop it and everything it started
+agentbox run -d --name build --title "Build the web app" -- "npm run build"
+                                   # start detached; returns at once with the run id
+agentbox wait build --timeout 8m   # block until done; exits with the command's code
+agentbox logs build -n 50          # last 50 lines of output
+agentbox status build              # status, exit code, duration
+agentbox kill build                # stop it and everything it started
 ```
 
 - **Keep `wait --timeout` below the shell tool's limit.** If the timeout expires first, `wait` exits `75` and the run keeps going. The agent should call `wait` again, not start the command over.
 - **Dev servers** should be started with `run -d` and left running. You can see them in the dashboard and stop them there.
 - **Cap a runaway command** with `run --timeout 30m`. When the run hits it, the run stops and reports exit code `124`.
 - **Name runs** so they're easy to refer to later. When several runs share a name, it refers to the newest one.
+- **Title runs** with `--title` so you can tell at a glance what each one is for. The dashboard shows the title in place of the command, both in the Runs tab and wherever the agent's `agentbox run`, `wait` or `kill` calls appear in its Claude session.
 
 All exit codes are listed in the [CLI reference](cli.md#exit-codes).
 

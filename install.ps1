@@ -6,6 +6,7 @@
 #   AGENTBOX_VERSION          version to install, e.g. 0.2.0 (default: latest)
 #   AGENTBOX_INSTALL_DIR      where to put agentbox.exe (default: %LOCALAPPDATA%\Programs\agentbox)
 #   AGENTBOX_NO_MODIFY_PATH   set to 1 to leave PATH alone
+#   AGENTBOX_NO_SHORTCUT      set to 1 to skip the Start menu shortcut
 #   AGENTBOX_BASE_URL         download from this URL instead of GitHub releases
 
 function Install-Agentbox {
@@ -85,6 +86,16 @@ function Install-Agentbox {
             [Environment]::SetEnvironmentVariable('Path', (($entries + $dir) -join ';'), 'User')
             $env:Path = "$env:Path;$dir"
             Write-Host "Added $dir to your user PATH. Open a new terminal to use it everywhere."
+        }
+    }
+
+    # A Start menu entry, so the dashboard can be pinned to the taskbar.
+    if ($env:AGENTBOX_NO_SHORTCUT -ne '1') {
+        & $target shortcut | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Added agentbox to the Start menu. Right-click it there and choose Pin to taskbar."
+        } else {
+            Write-Host "warning: could not add the Start menu shortcut"
         }
     }
 

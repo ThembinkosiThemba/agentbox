@@ -26,6 +26,7 @@ The scripts:
    - **Linux and macOS:** to `~/.local/bin/agentbox`
    - **Windows:** to `%LOCALAPPDATA%\Programs\agentbox\agentbox.exe`
 4. make sure new terminals can find it (see [PATH changes](#path-changes))
+5. add agentbox to the Start menu (Windows) or the applications menu (Linux desktops), so you can pin it to the taskbar or dock. See [`agentbox shortcut`](cli.md#shortcut)
 
 Run the script again to update. On Windows this works even while agentbox is running.
 
@@ -38,6 +39,7 @@ Set these environment variables before running the script:
 | `AGENTBOX_VERSION` | Install a specific version, e.g. `0.2.0` (default: latest) |
 | `AGENTBOX_INSTALL_DIR` | Install somewhere else |
 | `AGENTBOX_NO_MODIFY_PATH=1` | Don't change PATH; just print what to add |
+| `AGENTBOX_NO_SHORTCUT=1` | Don't add the Start menu / applications menu entry |
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ThembinkosiThemba/agentbox/main/install.sh | AGENTBOX_VERSION=0.2.0 sh
@@ -102,11 +104,12 @@ This requires Go 1.26 or later.
 git clone https://github.com/ThembinkosiThemba/agentbox
 cd agentbox
 go install .        # installs to $(go env GOPATH)/bin
+agentbox shortcut   # optional: add it to the Start menu / app launcher
 ```
 
 ## Uninstall
 
-Delete the binary:
+Run `agentbox shortcut --remove` to remove the launcher, then delete the binary:
 - **Linux and macOS:** `~/.local/bin/agentbox`
 - **Windows:** `%LOCALAPPDATA%\Programs\agentbox`
 

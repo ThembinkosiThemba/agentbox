@@ -21,7 +21,13 @@ var (
 	cYellow  = lipgloss.AdaptiveColor{Light: "#9A6700", Dark: "#D29922"}
 	cBlue    = lipgloss.AdaptiveColor{Light: "#0969DA", Dark: "#58A6FF"}
 	cOnColor = lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#0D1117"}
+	cCyan    = lipgloss.AdaptiveColor{Light: "#1B7C83", Dark: "#39C5CF"}
+	cPink    = lipgloss.AdaptiveColor{Light: "#BF3989", Dark: "#F778BA"}
+	cOrange  = lipgloss.AdaptiveColor{Light: "#BC4C00", Dark: "#F0883E"}
 )
+
+// series colors tell categories apart in the tool mix, in order of use.
+var series = []lipgloss.TerminalColor{cAccent, cBlue, cGreen, cYellow, cPink, cCyan, cOrange}
 
 var (
 	sText    = lipgloss.NewStyle().Foreground(cText)
@@ -40,7 +46,10 @@ var (
 	sLogo    = lipgloss.NewStyle().Foreground(cOnColor).Background(cAccent).Bold(true).Padding(0, 1)
 	sTabOn   = lipgloss.NewStyle().Foreground(cAccent).Bold(true)
 	sTabOff  = lipgloss.NewStyle().Foreground(cMuted)
+	sBadge   = lipgloss.NewStyle().Foreground(cAccent).Bold(true)
 )
+
+func fg(c lipgloss.TerminalColor) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
