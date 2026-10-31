@@ -66,7 +66,9 @@ main() {
 
 	mkdir -p "$dir"
 	chmod +x "$tmp/$asset"
-	[ "$os" = darwin ] && xattr -d com.apple.quarantine "$tmp/$asset" 2>/dev/null || true
+	if [ "$os" = darwin ]; then
+		xattr -d com.apple.quarantine "$tmp/$asset" 2>/dev/null || true
+	fi
 	mv -f "$tmp/$asset" "$dir/agentbox"
 	say "Installed $dir/agentbox"
 
