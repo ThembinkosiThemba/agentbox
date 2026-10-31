@@ -1,6 +1,6 @@
 # agentbox: notes for agents working on this repo
 
-agentbox is a Go TUI + CLI that shows and manages commands run by coding agents. See README.md for what it does from a user's point of view.
+agentbox is a Go TUI + CLI that shows and manages commands run by coding agents. See README.md and docs/ for what it does from a user's point of view.
 
 ## Layout
 
@@ -20,7 +20,7 @@ internal/human              duration/time/size formatting
 - **No daemon.** State lives on disk. A run's supervisor is the only writer of its `meta.json`. Other processes ask it to stop by writing the `kill` marker. They write `meta.json` themselves only when the supervisor is gone (status `lost`).
 - `lost` is derived (a stale heartbeat), never stored.
 - `internal/claude` must never write to Claude Code's files. Transcripts are append-only, and the scanner caches byte offsets. Keep parsing incremental.
-- Exit codes are part of the CLI contract (see README). Never pass through a stopped process's raw code: on Windows it is an NTSTATUS value that shells treat as an interrupt.
+- Exit codes are part of the CLI contract (see docs/cli.md). Never pass through a stopped process's raw code: on Windows it is an NTSTATUS value that shells treat as an interrupt.
 - Don't open log files with `O_APPEND` for children. On Windows that creates an append-only handle that Git Bash children can't write through.
 - Every TUI line must fit the terminal exactly. `TestViewFitsTerminal` checks this across sizes and screens. Use `fit`/`trunc` from layout.go, never raw `len` on styled strings.
 
