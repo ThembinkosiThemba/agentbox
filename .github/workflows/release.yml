@@ -1,0 +1,53 @@
+name: release
+
+# Push a tag like v0.2.0 to publish a GitHub release with standalone
+# binaries for every platform.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}" arch="${target#*/}"
+            out="dist/agentbox-${os}-${arch}"
+            [ "$os" = windows ] && out="$out.exe"
+            GOOS="$os" GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X agentbox/internal/cli.Version=${version}" \
+              -o "$out" .
+          done
+          cd dist && sha256sum * > checksums.txt && cat checksums.txt
+
+      - name: Smoke test
+        run: |
+          ./dist/agentbox-linux-amd64 version
+          AGENTBOX_HOME="$RUNNER_TEMP/ab" ./dist/agentbox-linux-amd64 run -- echo ok
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "agentbox $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
