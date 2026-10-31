@@ -20,30 +20,19 @@
 
 ## Install
 
-Download the binary for your platform from [**Releases**](https://github.com/ThembinkosiThemba/agentbox/releases/latest). It's a single file with no dependencies; put it on your `PATH`.
-
 **Linux / macOS**
 
 ```sh
-os=$(uname -s | tr A-Z a-z); arch=$(uname -m)
-[ "$arch" = x86_64 ] && arch=amd64; [ "$arch" = aarch64 ] && arch=arm64
-mkdir -p ~/.local/bin
-curl -fsSL -o ~/.local/bin/agentbox \
-  "https://github.com/ThembinkosiThemba/agentbox/releases/latest/download/agentbox-$os-$arch"
-chmod +x ~/.local/bin/agentbox
+curl -fsSL https://raw.githubusercontent.com/ThembinkosiThemba/agentbox/main/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-$dir = "$env:LOCALAPPDATA\Programs\agentbox"
-New-Item -ItemType Directory -Force $dir | Out-Null
-Invoke-WebRequest -OutFile "$dir\agentbox.exe" `
-  https://github.com/ThembinkosiThemba/agentbox/releases/latest/download/agentbox-windows-amd64.exe
-[Environment]::SetEnvironmentVariable("Path", "$([Environment]::GetEnvironmentVariable('Path','User'));$dir", "User")
+irm https://raw.githubusercontent.com/ThembinkosiThemba/agentbox/main/install.ps1 | iex
 ```
 
-Then open a new terminal so the `PATH` change takes effect. See [installation](docs/install.md) for every platform, checksums and building from source.
+The installer downloads the right binary for your OS and CPU, checks it against the published checksum, and adds it to your PATH. Open a new terminal afterwards and `agentbox` works everywhere. See [installation](docs/install.md) for options, manual downloads and building from source.
 
 ## Quick start
 

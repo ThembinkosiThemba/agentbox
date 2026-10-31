@@ -38,3 +38,5 @@ Style: standard gofmt, small packages, comments only where the reason isn't obvi
 ## Releases
 
 `.github/workflows/release.yml` runs on `v*` tags: it reuses `ci.yml` (tests on Linux, Windows and macOS), then builds `CGO_ENABLED=0` binaries for linux, darwin and windows on amd64 and arm64, and publishes them with `checksums.txt`. The version comes from the tag via `-X agentbox/internal/cli.Version`. Keep the code pure Go (no cgo) so cross-compiling keeps working.
+
+`install.sh` (Linux/macOS, POSIX sh, shellcheck-clean) and `install.ps1` (Windows PowerShell 5.1+) download a release binary, verify it against `checksums.txt` and set up PATH. Both read the same `AGENTBOX_*` variables; keep them in step.
