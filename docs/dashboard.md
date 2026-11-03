@@ -5,7 +5,7 @@ Run `agentbox` (or `agentbox tui`) to open it. It refreshes every second and nee
 The header shows the two tabs and, on the right:
 
 - how many runs are in progress
-- how many Claude background tasks are running
+- how many background tasks agents have running
 - how many Claude Code processes are live, and how many sessions are active
 
 ## Runs tab
@@ -58,11 +58,22 @@ A task shows **unknown** when Claude never recorded a completion notice, usually
 
 This tab only reads Claude Code's files. It never changes them.
 
+## Agy tab
+
+Antigravity CLI (`agy`) sessions from the last 7 days, read from `~/.gemini/antigravity-cli`. It works like the Claude tab, with the same summary, command list and background tasks, and it only reads agy's files.
+
+agy records less than Claude Code, so a few things differ:
+
+- no branch, client version or cost, and token counts only from recent versions of agy
+- a command's duration runs from when it was requested to when it finished, so it includes any time agy spent waiting for you to approve it
+- a command that never got a result shows as **INTERRUPTED**, because agy writes nothing when one is cut off
+- agy's processes aren't counted in the header's **live** figure, because it keeps no record of them. Its sessions do count as **active**
+
 ## Keys
 
 | Key | Action |
 | --- | --- |
-| `←` `→` · `Tab` · `1` `2` · click a tab | Switch between Runs and Claude |
+| `←` `→` · `Tab` · `1` `2` `3` · click a tab | Switch between Runs, Claude and Agy |
 | `↑` `↓` · `j` `k` · mouse wheel | Move the selection |
 | `PgUp` `PgDn` · `g` `G` | Page · first · last |
 | click a row | Select it; click again to open |

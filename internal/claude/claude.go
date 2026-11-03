@@ -24,7 +24,11 @@ import (
 // session to count as active.
 const ActiveWindow = 2 * time.Minute
 
+// Agent is the name recorded on runs and sessions that came from Claude Code.
+const Agent = "claude-code"
+
 type Session struct {
+	Agent      string
 	ID         string
 	Path       string
 	Project    string // project directory slug under ~/.claude/projects
@@ -36,6 +40,7 @@ type Session struct {
 	FirstAsk   string
 	LastPrompt string
 	Model      string
+	Resume     string // the command that continues this session
 
 	StartedAt    time.Time
 	LastActivity time.Time
@@ -274,14 +279,14 @@ func (sc *Scanner) Scan(maxAge time.Duration, limit int) ([]*Session, error) {
 		if st.sess.Prompts == 0 && st.sess.Turns == 0 {
 			continue // empty or metadata-only transcript
 		}
-		out = append(out, st.sess.snapshot())
+		out = append(out, st.sess.Snapshot())
 	}
 	return out, nil
 }
 
-// snapshot deep-copies a session so callers can read it while the scanner
+// Snapshot deep-copies a session so callers can read it while the scanner
 // keeps updating the original.
-func (s *Session) snapshot() *Session {
+func (s *Session) Snapshot() *Session {
 	c := *s
 	c.ToolCounts = make(map[string]int, len(s.ToolCounts))
 	for k, v := range s.ToolCounts {
@@ -304,9 +309,11 @@ func newFileState(path string) *fileState {
 	id := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	return &fileState{
 		sess: &Session{
+			Agent:      Agent,
 			ID:         id,
 			Path:       path,
 			Project:    filepath.Base(filepath.Dir(path)),
+			Resume:     "claude --resume " + id,
 			ToolCounts: map[string]int{},
 		},
 		execs:   map[string]*Exec{},
@@ -533,7 +540,7 @@ func (st *fileState) user(rec *record, ts time.Time) {
 				continue
 			}
 			e.End, e.IsError = ts, b.IsError
-			e.Output = clip(blockText(b.Content), 8000)
+			e.Output = Clip(blockText(b.Content), 8000)
 			var meta toolResultMeta
 			_ = json.Unmarshal(rec.ToolUseResult, &meta)
 			e.Interrupted = meta.Interrupted
@@ -561,7 +568,7 @@ func (st *fileState) prompt(text string) {
 	s := st.sess
 	s.Prompts++
 	if s.FirstAsk == "" {
-		s.FirstAsk = oneLine(text, 120)
+		s.FirstAsk = OneLine(text, 120)
 	}
 }
 
@@ -641,8 +648,8 @@ func blockText(raw json.RawMessage) string {
 	return b.String()
 }
 
-// clip keeps the head and tail of long output, where errors usually are.
-func clip(s string, max int) string {
+// Clip keeps the head and tail of long output, where errors usually are.
+func Clip(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
@@ -650,7 +657,7 @@ func clip(s string, max int) string {
 	return s[:half] + "\n\n  … " + strconv.Itoa(len(s)-max) + " bytes omitted …\n\n" + s[len(s)-half:]
 }
 
-func oneLine(s string, max int) string {
+func OneLine(s string, max int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if r := []rune(s); len(r) > max {
 		return string(r[:max-1]) + "…"

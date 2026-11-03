@@ -32,6 +32,7 @@ GOOS=darwin go vet ./...
 | `internal/supervisor` | The run lifecycle: create, spawn detached, supervise, kill |
 | `internal/proc` | Platform process handling: Job Objects on Windows, process groups elsewhere |
 | `internal/claude` | Read-only, incremental parser for Claude Code transcripts |
+| `internal/agy` | Read-only, incremental parser for Antigravity CLI transcripts |
 | `internal/tui` | The dashboard (Bubble Tea and Lip Gloss) |
 | `internal/human` | Formatting of durations, times and sizes |
 | `internal/launcher` | `agentbox shortcut`: Start menu shortcut, Linux desktop entry, macOS `.command` |

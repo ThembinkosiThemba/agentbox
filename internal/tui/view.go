@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"agentbox/internal/agy"
 	"agentbox/internal/claude"
 	"agentbox/internal/human"
 	"agentbox/internal/store"
@@ -70,19 +71,34 @@ func (m *model) viewHeader() string {
 		return sTabOff.Render(label)
 	}
 	logo := sLogo.Render("agentbox") + "  "
-	runsTab, claudeTab := tabLabel(tabRuns, "Runs", len(m.runs)), tabLabel(tabClaude, "Claude", len(m.sessions))
-	left := logo + runsTab + " " + claudeTab
+	agySessions := 0
+	for _, s := range m.sessions {
+		if s.Agent == agy.Agent {
+			agySessions++
+		}
+	}
+	left := logo
 	x := width(logo)
-	m.tabHits[tabRuns] = [2]int{x, x + width(runsTab)}
-	x += width(runsTab) + 1
-	m.tabHits[tabClaude] = [2]int{x, x + width(claudeTab)}
+	for i, label := range []string{
+		tabRuns:   tabLabel(tabRuns, "Runs", len(m.runs)),
+		tabClaude: tabLabel(tabClaude, "Claude", len(m.sessions)-agySessions),
+		tabAgy:    tabLabel(tabAgy, "Agy", agySessions),
+	} {
+		if i > 0 {
+			left += " "
+			x++
+		}
+		left += label
+		m.tabHits[i] = [2]int{x, x + width(label)}
+		x += width(label)
+	}
 
 	var stats []string
 	if running > 0 {
 		stats = append(stats, sYellow.Render(m.spin()+" "+itoa(running)+" running"))
 	}
 	if tasks > 0 {
-		stats = append(stats, sBlue.Render("⇢ "+itoa(tasks)+" claude tasks"))
+		stats = append(stats, sBlue.Render("⇢ "+itoa(tasks)+" tasks"))
 	}
 	dot := sFaint.Render("○")
 	if m.live > 0 {
@@ -326,7 +342,11 @@ func (m *model) viewSessions(w, h int) string {
 
 	var listLines []string
 	if len(ss) == 0 {
-		msg := []string{sBold.Render("No Claude Code sessions"), "", sMuted.Render("Looked in " + claude.ConfigDir())}
+		name, dir := "Claude Code", claude.ConfigDir()
+		if m.tab == tabAgy {
+			name, dir = "Antigravity", agy.DataDir()
+		}
+		msg := []string{sBold.Render("No " + name + " sessions in the last 7 days"), "", sMuted.Render("Looked in " + dir)}
 		if !m.loaded {
 			msg = []string{sMuted.Render(m.spin() + " reading sessions…")}
 		} else if m.filter != "" {
@@ -359,7 +379,11 @@ func (m *model) viewSessions(w, h int) string {
 	if len(ss) > 0 {
 		count = fmt.Sprintf("%d/%d", m.sesSel+1, len(ss))
 	}
-	left := panel("Claude Code sessions", count, listLines, lw, lh, true)
+	heading := "Claude Code sessions"
+	if m.tab == tabAgy {
+		heading = "Antigravity sessions"
+	}
+	left := panel(heading, count, listLines, lw, lh, true)
 
 	var detail []string
 	title := "Session"
@@ -464,11 +488,11 @@ func (m *model) sessionSummary(s *claude.Session, w, h int) []string {
 			room--
 		}
 	}
-	if len(lines) < h-1 {
+	if s.Resume != "" && len(lines) < h-1 {
 		for len(lines) < h-1 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, sFaint.Render("resume  ")+sMuted.Render("claude --resume "+s.ID))
+		lines = append(lines, sFaint.Render("resume  ")+sMuted.Render(s.Resume))
 	}
 	return lines
 }
@@ -700,7 +724,7 @@ func (m *model) viewHelp() string {
 		name string
 		keys []kv
 	}{
-		{"Everywhere", []kv{{"← → · tab", "switch between Runs and Claude"}, {"↑↓ · j k", "move"}, {"g · G", "first · last"},
+		{"Everywhere", []kv{{"← → · tab", "switch between tabs"}, {"↑↓ · j k", "move"}, {"g · G", "first · last"},
 			{"enter", "open"}, {"esc", "back / clear filter"}, {"/", "filter"}, {"q", "quit"}}},
 		{"Runs", []kv{{"n", "start a command here"}, {"x", "stop the run and its process tree"}, {"r", "restart"}, {"d", "delete"}}},
 		{"Logs", []kv{{"f", "follow output"}, {"w", "wrap lines"}, {"PgUp PgDn", "page"}}},
@@ -793,8 +817,10 @@ func whoShort(agent string) string {
 	switch agent {
 	case "":
 		return "you"
-	case "claude-code":
+	case claude.Agent:
 		return "claude"
+	case agy.Agent:
+		return "agy"
 	}
 	return agent
 }

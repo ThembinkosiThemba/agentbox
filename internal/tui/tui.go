@@ -1,5 +1,5 @@
-// Package tui is agentbox's dashboard: agentbox runs on one tab, Claude Code
-// sessions (with their commands and background tasks) on the other.
+// Package tui is agentbox's dashboard: agentbox runs on one tab, and on one
+// tab per agent, its sessions with their commands and background tasks.
 package tui
 
 import (
@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"agentbox/internal/agy"
 	"agentbox/internal/claude"
 	"agentbox/internal/store"
 	"agentbox/internal/supervisor"
@@ -34,6 +35,8 @@ type tab int
 const (
 	tabRuns tab = iota
 	tabClaude
+	tabAgy
+	tabCount
 )
 
 type screen int
@@ -63,6 +66,7 @@ const (
 type model struct {
 	st      *store.Store
 	scanner *claude.Scanner
+	agy     *agy.Scanner
 	hooks   Hooks
 	cwd     string
 
@@ -83,6 +87,7 @@ type model struct {
 	runID          string
 	sesSel, sesOff int
 	sesID          string
+	sesIDs         [tabCount]string // the selected session per tab
 	detSel, detOff int
 	detKey         string
 	detSession     *claude.Session
@@ -97,7 +102,7 @@ type model struct {
 	confirmText  string
 	confirmDo    func() tea.Cmd
 
-	tabHits [2][2]int // header x-ranges of the tab labels, for clicks
+	tabHits [tabCount][2]int // header x-ranges of the tab labels, for clicks
 
 	flash      string
 	flashErr   bool
@@ -147,7 +152,7 @@ func newModel(st *store.Store, hooks Hooks) *model {
 	in.TextStyle = sText
 	in.PlaceholderStyle = sFaint
 	in.Cursor.Style = sAccent
-	return &model{st: st, scanner: claude.NewScanner(), hooks: hooks, cwd: cwd, now: time.Now(), input: in}
+	return &model{st: st, scanner: claude.NewScanner(), agy: agy.NewScanner(), hooks: hooks, cwd: cwd, now: time.Now(), input: in}
 }
 
 func (m *model) Init() tea.Cmd {
@@ -160,10 +165,12 @@ func frameTick() tea.Cmd {
 
 func (m *model) load(tick bool) tea.Cmd {
 	m.loading = true
-	st, sc := m.st, m.scanner
+	st, sc, ag := m.st, m.scanner, m.agy
 	return func() tea.Msg {
 		runs, _ := st.List()
 		sessions, _ := sc.Scan(sessionAge, sessionLimit)
+		agySessions, _ := ag.Scan(sessionAge, sessionLimit)
+		sessions = append(sessions, agySessions...)
 		return dataMsg{runs: runs, sessions: sessions, live: claude.LiveProcesses(), tick: tick}
 	}
 }
@@ -285,14 +292,20 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch k {
-	case "tab", "shift+tab":
+	case "tab":
 		if m.screen == screenMain {
-			m.switchTab(1 - m.tab)
+			m.switchTab((m.tab + 1) % tabCount)
+		}
+	case "shift+tab":
+		if m.screen == screenMain {
+			m.switchTab((m.tab + tabCount - 1) % tabCount)
 		}
 	case "1":
 		m.switchTab(tabRuns)
 	case "2":
 		m.switchTab(tabClaude)
+	case "3":
+		m.switchTab(tabAgy)
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -311,13 +324,13 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.open()
 	case "right", "l":
 		if m.screen == screenMain {
-			m.switchTab(tabClaude)
+			m.switchTab(min(m.tab+1, tabCount-1))
 		} else {
 			m.open()
 		}
 	case "left", "h":
 		if m.screen == screenMain {
-			m.switchTab(tabRuns)
+			m.switchTab(max(m.tab-1, tabRuns))
 		} else {
 			m.back()
 		}
@@ -420,6 +433,8 @@ func (m *model) switchTab(t tab) {
 	if m.screen != screenMain || m.tab == t {
 		return
 	}
+	m.sesIDs[m.tab] = m.sesID
+	m.sesID, m.sesSel, m.sesOff = m.sesIDs[t], 0, 0
 	m.tab, m.filter = t, ""
 	m.reselect()
 	m.loadPreview()
@@ -432,7 +447,7 @@ func (m *model) open() {
 		if r := m.selectedRun(); r != nil {
 			m.openLog(logState{title: r.DisplayName(), path: m.st.LogPath(r.ID), runID: r.ID, back: screenMain})
 		}
-	case m.screen == screenMain && m.tab == tabClaude:
+	case m.screen == screenMain && m.tab != tabRuns:
 		if s := m.selectedSession(); s != nil {
 			m.detSession, m.detSel, m.detOff, m.detKey, m.filter = s, 0, 0, "", ""
 			m.screen = screenSession
@@ -494,7 +509,7 @@ func (m *model) click(x, y int) {
 	switch {
 	case m.screen == screenSession:
 		sel, off = &m.detSel, m.detOff
-	case m.tab == tabClaude:
+	case m.tab != tabRuns:
 		sel, off = &m.sesSel, m.sesOff
 	}
 	idx := off + (y-2)/2
@@ -604,9 +619,13 @@ func (m *model) visibleRuns() []*store.Run {
 }
 
 func (m *model) visibleSessions() []*claude.Session {
+	agent := claude.Agent
+	if m.tab == tabAgy {
+		agent = agy.Agent
+	}
 	out := make([]*claude.Session, 0, len(m.sessions))
 	for _, s := range m.sessions {
-		if matches(m.filter, s.ID, s.DisplayTitle(), s.Cwd, s.Branch, s.LastPrompt) {
+		if s.Agent == agent && matches(m.filter, s.ID, s.DisplayTitle(), s.Cwd, s.Branch, s.LastPrompt) {
 			out = append(out, s)
 		}
 	}

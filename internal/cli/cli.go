@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
+	"agentbox/internal/agy"
 	"agentbox/internal/claude"
 	"agentbox/internal/human"
 	"agentbox/internal/launcher"
@@ -55,8 +57,8 @@ func init() {
 		{"restart", nil, "<id>", "Start a run's command again, detached", cmdRestart},
 		{"rm", nil, "[-f] <id>...", "Delete finished runs", cmdRm},
 		{"prune", nil, "[--older-than 24h]", "Delete all finished runs", cmdPrune},
-		{"sessions", nil, "[id] [--json] [--days 3]", "List Claude Code sessions, or show one", cmdSessions},
-		{"guide", nil, "", "Print instructions to give coding agents (for CLAUDE.md / AGENTS.md)", cmdGuide},
+		{"sessions", nil, "[id] [--json] [--days 3]", "List Claude Code and Antigravity sessions, or show one", cmdSessions},
+		{"guide", nil, "", "Print instructions to give coding agents (for CLAUDE.md / GEMINI.md / AGENTS.md)", cmdGuide},
 		{"shortcut", nil, "[--desktop] [--remove]", "Add agentbox to the Start menu / app launcher, to pin it", cmdShortcut},
 		{"tui", []string{"ui"}, "", "Open the dashboard (default with no command)", cmdTUI},
 		{"version", nil, "", "Print the version", func(*store.Store, []string) int { fmt.Println("agentbox", Version); return 0 }},
@@ -505,10 +507,17 @@ func cmdSessions(_ *store.Store, args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	sessions, err := claude.NewScanner().Scan(time.Duration(*days)*24*time.Hour, 100)
+	age := time.Duration(*days) * 24 * time.Hour
+	sessions, err := claude.NewScanner().Scan(age, 100)
 	if err != nil {
 		return die(err)
 	}
+	agySessions, err := agy.NewScanner().Scan(age, 100)
+	if err != nil {
+		return die(err)
+	}
+	sessions = append(sessions, agySessions...)
+	sort.SliceStable(sessions, func(i, j int) bool { return sessions[i].ModTime.After(sessions[j].ModTime) })
 	now := time.Now()
 	if ref := fs.Arg(0); ref != "" {
 		for _, s := range sessions {
@@ -520,7 +529,8 @@ func cmdSessions(_ *store.Store, args []string) int {
 	}
 	if *asJSON {
 		type row struct {
-			ID, Title, Cwd, Branch, Model string
+			Agent, ID, Title, Cwd, Branch string
+			Model                         string
 			Active                        bool
 			LastActivity                  time.Time
 			Prompts, Commands, Tasks      int
@@ -529,14 +539,14 @@ func cmdSessions(_ *store.Store, args []string) int {
 		}
 		rows := []row{}
 		for _, s := range sessions {
-			rows = append(rows, row{s.ID, s.DisplayTitle(), s.Cwd, s.Branch, s.Model, s.Active(now), s.LastActivity,
+			rows = append(rows, row{s.Agent, s.ID, s.DisplayTitle(), s.Cwd, s.Branch, s.Model, s.Active(now), s.LastActivity,
 				s.Prompts, len(s.Execs), len(s.Tasks), s.RunningTasks(now), s.CostUSD})
 		}
 		printJSON(rows)
 		return 0
 	}
 	if len(sessions) == 0 {
-		fmt.Println(dim("No Claude Code sessions found in " + claude.ConfigDir()))
+		fmt.Println(dim("No agent sessions found in " + claude.ConfigDir() + " or " + agy.DataDir()))
 		return 0
 	}
 	var rows [][]string
@@ -549,10 +559,10 @@ func cmdSessions(_ *store.Store, args []string) int {
 		if r := s.RunningTasks(now); r > 0 {
 			tasks = fmt.Sprintf("%d (%d running)", len(s.Tasks), r)
 		}
-		rows = append(rows, []string{mark, s.ID[:8], human.Ago(s.ModTime, now), fmt.Sprint(len(s.Execs)),
+		rows = append(rows, []string{mark, s.ID[:8], s.Agent, human.Ago(s.ModTime, now), fmt.Sprint(len(s.Execs)),
 			tasks, truncate(baseName(s.Cwd), 24), truncate(s.DisplayTitle(), 50)})
 	}
-	table(os.Stdout, []string{"", "SESSION", "LAST", "CMDS", "TASKS", "PROJECT", "TITLE"}, rows)
+	table(os.Stdout, []string{"", "SESSION", "AGENT", "LAST", "CMDS", "TASKS", "PROJECT", "TITLE"}, rows)
 	return 0
 }
 
@@ -562,7 +572,7 @@ func printSession(s *claude.Session, now time.Time) int {
 		state = green("active")
 	}
 	fmt.Printf("%s  %s  %s\n", bold(s.ID), state, s.DisplayTitle())
-	fmt.Printf("  %s %s   %s %s\n", dim("project"), s.Cwd, dim("last"), human.Ago(s.ModTime, now))
+	fmt.Printf("  %s %s   %s %s   %s %s\n", dim("agent"), s.Agent, dim("project"), s.Cwd, dim("last"), human.Ago(s.ModTime, now))
 	if len(s.Tasks) > 0 {
 		fmt.Println("\n" + dim("BACKGROUND TASKS"))
 		var rows [][]string

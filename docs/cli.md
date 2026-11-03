@@ -125,7 +125,7 @@ agentbox prune [--older-than 24h]
 agentbox sessions [id] [--days 3] [--json]
 ```
 
-Lists Claude Code sessions active within `--days` (default 3): active state, id, last activity, number of commands, background tasks, project and title. Give a session id (or a prefix of it) to list that session's background tasks and recent commands instead.
+Lists Claude Code and Antigravity CLI sessions active within `--days` (default 3): active state, id, agent, last activity, number of commands, background tasks, project and title. Give a session id (or a prefix of it) to list that session's background tasks and recent commands instead.
 
 ## guide
 
@@ -133,7 +133,7 @@ Lists Claude Code sessions active within `--days` (default 3): active state, id,
 agentbox guide
 ```
 
-Prints instructions for coding agents, ready to add to `CLAUDE.md` or `AGENTS.md`. See [Using agentbox with coding agents](agents.md).
+Prints instructions for coding agents, ready to add to `CLAUDE.md`, `GEMINI.md` or `AGENTS.md`. See [Using agentbox with coding agents](agents.md).
 
 ## shortcut
 

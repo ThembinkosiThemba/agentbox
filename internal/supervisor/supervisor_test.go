@@ -110,3 +110,28 @@ func TestTimeout(t *testing.T) {
 		t.Fatalf("took %s to time out", d)
 	}
 }
+
+func TestAttribute(t *testing.T) {
+	for _, v := range []string{"AGENTBOX_AGENT", "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID", "ANTIGRAVITY_CONVERSATION_ID", "AI_AGENT"} {
+		t.Setenv(v, "")
+	}
+	r := &store.Run{}
+	attribute(r)
+	if r.Agent != "" {
+		t.Errorf("no agent: Agent = %q", r.Agent)
+	}
+
+	t.Setenv("ANTIGRAVITY_CONVERSATION_ID", "41fec8a8")
+	r = &store.Run{}
+	attribute(r)
+	if r.Agent != "antigravity" || r.SessionID != "41fec8a8" {
+		t.Errorf("agy: Agent, SessionID = %q, %q", r.Agent, r.SessionID)
+	}
+
+	t.Setenv("AGENTBOX_AGENT", "mine")
+	r = &store.Run{}
+	attribute(r)
+	if r.Agent != "mine" {
+		t.Errorf("explicit: Agent = %q", r.Agent)
+	}
+}

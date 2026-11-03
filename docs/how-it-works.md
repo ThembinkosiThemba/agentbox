@@ -68,3 +68,11 @@ Live Claude Code processes are counted from the per-process files in `~/.claude/
 Transcripts only grow, so agentbox remembers how far into each file it has read and parses only new lines on each refresh. That keeps refreshes fast even for sessions that are several megabytes long.
 
 agentbox never writes to any of Claude Code's files.
+
+## Antigravity CLI sessions
+
+The Agy tab and `agentbox sessions` read the transcripts `agy` keeps at `~/.gemini/antigravity-cli/brain/<conversation>/.system_generated/logs/transcript_full.jsonl`, incrementally in the same way. From each transcript agentbox takes prompts, model, token usage, every `run_command` call matched to its result, and every background task with its log file and completion notice.
+
+Titles come from `annotations/<conversation>.pbtxt` and `cache/conversation_metadata.json`, and the project directory from that cache or `cache/last_conversations.json`. These files cover only some conversations, so agentbox falls back to the first prompt and the directory of the first command.
+
+agentbox never writes to any of agy's files.

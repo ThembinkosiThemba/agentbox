@@ -73,6 +73,9 @@ func attribute(r *store.Run) {
 		r.Agent = "claude-code"
 		r.SessionID = os.Getenv("CLAUDE_CODE_SESSION_ID")
 		r.AgentPID, _ = strconv.Atoi(os.Getenv("CLAUDE_PID"))
+	case os.Getenv("ANTIGRAVITY_CONVERSATION_ID") != "":
+		r.Agent = "antigravity"
+		r.SessionID = os.Getenv("ANTIGRAVITY_CONVERSATION_ID")
 	case os.Getenv("AI_AGENT") != "":
 		r.Agent, _, _ = strings.Cut(os.Getenv("AI_AGENT"), "_")
 	}

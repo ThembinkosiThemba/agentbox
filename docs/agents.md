@@ -15,7 +15,8 @@ If an agent starts these commands with `agentbox run -d` instead, they run outsi
 ```sh
 agentbox guide >> ~/.claude/CLAUDE.md   # every Claude Code session on this machine
 agentbox guide >> CLAUDE.md             # one project, Claude Code
-agentbox guide >> AGENTS.md             # one project, Codex and other agents
+agentbox guide >> GEMINI.md             # one project, Antigravity CLI
+agentbox guide >> AGENTS.md             # one project, Codex, Antigravity CLI and other agents
 ```
 
 ## The pattern agents follow
@@ -42,6 +43,7 @@ All exit codes are listed in the [CLI reference](cli.md#exit-codes).
 Every run records who launched it. The dashboard and `agentbox ls` show this in the **by** column:
 
 - **Claude Code** is detected automatically from `CLAUDE_CODE_SESSION_ID`. The run is linked to the exact session that started it.
+- **Antigravity CLI** is detected automatically from `ANTIGRAVITY_CONVERSATION_ID`, which also links the run to its session.
 - **Other agents** can set `AGENTBOX_AGENT=<name>` in their environment.
 - Runs you start yourself show as **you**.
 
@@ -50,3 +52,5 @@ The command also gets `AGENTBOX_RUN_ID` in its environment, in case it needs to 
 ## What agentbox sees without the wrapper
 
 The **Claude** tab reads Claude Code's own transcripts, so it shows every session's commands and `run_in_background` tasks even when the agent never calls agentbox. That view is read-only. agentbox can show Claude's own background tasks and their output, but can't stop them, because Claude doesn't record their process ids. Commands that need to be stoppable should go through `agentbox run`.
+
+The **Agy** tab does the same for Antigravity CLI, reading its transcripts under `~/.gemini/antigravity-cli`. It is read-only too, and for the same reason its background tasks can't be stopped from agentbox.

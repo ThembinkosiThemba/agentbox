@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"agentbox/internal/agy"
 	"agentbox/internal/claude"
 	"agentbox/internal/store"
 )
@@ -31,7 +32,7 @@ func fixture(t *testing.T) *model {
 			CreatedAt: start, StartedAt: &start, EndedAt: &now, ExitCode: &code},
 	}
 	m.sessions = []*claude.Session{{
-		ID: "c39bfc8a-8239-4214-bd49-20e8b5205531", Title: "Agentbox TUI", Cwd: `C:\code\agentbox`, Branch: "main",
+		Agent: claude.Agent, ID: "c39bfc8a-8239-4214-bd49-20e8b5205531", Title: "Agentbox TUI", Cwd: `C:\code\agentbox`, Branch: "main",
 		Model: "claude-opus-5-5", StartedAt: start, LastActivity: now, ModTime: now, Prompts: 3, Turns: 40,
 		ToolCounts: map[string]int{"Bash": 24, "Read": 9, "Edit": 5},
 		Execs: []*claude.Exec{
@@ -45,6 +46,17 @@ func fixture(t *testing.T) *model {
 		},
 		Tasks: []*claude.Task{{ID: "b39ed3n6g", Command: "npm run build", Description: "Build site", Start: start, End: now,
 			Status: "completed", Summary: `Background command "Build site" completed (exit code 0)`, ExitCode: new(int)}},
+	}, {
+		Agent: agy.Agent, ID: "41fec8a8-aee7-4a42-be74-a23460fd7234", Title: "Fix React Effect Warnings", Cwd: `C:\code\web`,
+		Model: "Gemini 3.8 Flash (Low)", Entrypoint: "agy", Resume: "agy --conversation 41fec8a8-aee7-4a42-be74-a23460fd7234",
+		StartedAt: start, LastActivity: now, ModTime: now, Prompts: 2, Turns: 8,
+		ToolCounts: map[string]int{"run_command": 2, "view_file": 6},
+		Execs: []*claude.Exec{
+			{ToolUseID: "step-2", Tool: "run_command", Command: "pnpm lint", Description: "Lint", Start: start, End: now, TaskID: "task-2", Background: true},
+			{ToolUseID: "step-4", Tool: "run_command", Command: "pnpm build", Description: "Build", Start: start, End: now,
+				IsError: true, Output: "Exit code 1\n\nbuild failed"},
+		},
+		Tasks: []*claude.Task{{ID: "task-2", Command: "pnpm lint", Description: "Lint", Start: start, End: now, Status: "completed", ExitCode: new(int)}},
 	}}
 	m.reselect()
 	return m
@@ -62,6 +74,10 @@ func TestViewFitsTerminal(t *testing.T) {
 			"task":    func(m *model) { m.switchTab(tabClaude); m.open(); m.open() },
 			"command": func(m *model) { m.switchTab(tabClaude); m.open(); m.move(1) },
 			"abcall":  func(m *model) { m.switchTab(tabClaude); m.open(); m.move(4) },
+			"agy":     func(m *model) { m.switchTab(tabAgy) },
+			"agyses":  func(m *model) { m.switchTab(tabAgy); m.open() },
+			"agycmd":  func(m *model) { m.switchTab(tabAgy); m.open(); m.move(1) },
+			"noagy":   func(m *model) { m.sessions = m.sessions[:1]; m.switchTab(tabAgy) },
 			"log":     func(m *model) { m.open() },
 			"help":    func(m *model) { m.overlay = ovHelp },
 			"confirm": func(m *model) { m.ask("Stop k3x9p2 (dev server) and everything it started?", nil) },
