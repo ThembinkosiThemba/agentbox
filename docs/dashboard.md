@@ -35,7 +35,7 @@ Press `Enter` to open the output full screen.
 
 ## Claude tab
 
-Claude Code sessions from the last 7 days, read from `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR`). A session is **active** (●) if its transcript changed in the last 2 minutes. Active sessions are listed first.
+Claude Code sessions within the [session range](#session-range), read from `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR`). A session is **active** (●) if its transcript changed in the last 2 minutes. Active sessions are listed first.
 
 The summary pane shows:
 
@@ -60,7 +60,7 @@ This tab only reads Claude Code's files. It never changes them.
 
 ## Agy tab
 
-Antigravity CLI (`agy`) sessions from the last 7 days, read from `~/.gemini/antigravity-cli`. It works like the Claude tab, with the same summary, command list and background tasks, and it only reads agy's files.
+Antigravity CLI (`agy`) sessions within the [session range](#session-range), read from `~/.gemini/antigravity-cli`. It works like the Claude tab, with the same summary, command list and background tasks, and it only reads agy's files.
 
 agy records less than Claude Code, so a few things differ:
 
@@ -68,6 +68,15 @@ agy records less than Claude Code, so a few things differ:
 - a command's duration runs from when it was requested to when it finished, so it includes any time agy spent waiting for you to approve it
 - a command that never got a result shows as **INTERRUPTED**, because agy writes nothing when one is cut off
 - agy's processes aren't counted in the header's **live** figure, because it keeps no record of them. Its sessions do count as **active**
+
+## Session range
+
+The Claude and Agy tabs show sessions active within a range, named in the list's title. It starts at the last 7 days. The Runs tab has no range: it always shows every run.
+
+- `t` moves to the next range: 1d, 3d, 7d, 30d, 90d, then all time.
+- `T` lets you type one: `45m`, `12h`, `14d`, `2w`, `3mo`, `1y` or `all`. A bare number means days.
+
+Your choice applies to both tabs and is remembered in `dashboard.json` in the agentbox home. The first scan of a wide range reads every transcript in it, so it can take a moment.
 
 ## Keys
 
@@ -78,6 +87,7 @@ agy records less than Claude Code, so a few things differ:
 | `PgUp` `PgDn` · `g` `G` | Page · first · last |
 | click a row | Select it; click again to open |
 | `Enter` | Open: full-screen log, session details, task output |
+| `t` · `T` | Claude and Agy tabs: next session range · type a custom one |
 | `Esc` · `←` | Back, or clear the filter |
 | `/` | Filter the current list (matches ids, names, commands, paths, titles) |
 | `?` | Show all keys |

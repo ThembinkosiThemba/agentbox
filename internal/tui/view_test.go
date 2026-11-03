@@ -78,6 +78,16 @@ func TestViewFitsTerminal(t *testing.T) {
 			"agyses":  func(m *model) { m.switchTab(tabAgy); m.open() },
 			"agycmd":  func(m *model) { m.switchTab(tabAgy); m.open(); m.move(1) },
 			"noagy":   func(m *model) { m.sessions = m.sessions[:1]; m.switchTab(tabAgy) },
+			"range":   func(m *model) { m.switchTab(tabAgy); m.openInput("range", "12h, 14d, 2w, 3mo, 1y or all", "7d") },
+			"rangeall": func(m *model) {
+				m.switchTab(tabClaude)
+				m.sessionRange = allTime
+			},
+			"rangelong": func(m *model) {
+				m.sessions = nil
+				m.switchTab(tabClaude)
+				m.sessionRange = 1000 * day
+			},
 			"log":     func(m *model) { m.open() },
 			"help":    func(m *model) { m.overlay = ovHelp },
 			"confirm": func(m *model) { m.ask("Stop k3x9p2 (dev server) and everything it started?", nil) },

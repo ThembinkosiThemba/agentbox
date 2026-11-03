@@ -59,8 +59,6 @@ const (
 const (
 	frameEvery   = 120 * time.Millisecond
 	refreshEvery = time.Second
-	sessionAge   = 7 * 24 * time.Hour
-	sessionLimit = 80
 )
 
 type model struct {
@@ -92,7 +90,9 @@ type model struct {
 	detKey         string
 	detSession     *claude.Session
 
-	filter string
+	filter       string
+	sessionRange time.Duration
+	scannedRange time.Duration // the range m.sessions was scanned with
 
 	preview previewState
 	log     logState
@@ -137,6 +137,8 @@ type (
 		sessions []*claude.Session
 		live     int
 		tick     bool
+
+		sessionRange time.Duration // the range the sessions were scanned with
 	}
 	actionMsg struct {
 		text string
@@ -152,7 +154,9 @@ func newModel(st *store.Store, hooks Hooks) *model {
 	in.TextStyle = sText
 	in.PlaceholderStyle = sFaint
 	in.Cursor.Style = sAccent
-	return &model{st: st, scanner: claude.NewScanner(), agy: agy.NewScanner(), hooks: hooks, cwd: cwd, now: time.Now(), input: in}
+	m := &model{st: st, scanner: claude.NewScanner(), agy: agy.NewScanner(), hooks: hooks, cwd: cwd, now: time.Now(), input: in}
+	m.sessionRange = m.loadSessionRange()
+	return m
 }
 
 func (m *model) Init() tea.Cmd {
@@ -165,13 +169,13 @@ func frameTick() tea.Cmd {
 
 func (m *model) load(tick bool) tea.Cmd {
 	m.loading = true
-	st, sc, ag := m.st, m.scanner, m.agy
+	st, sc, ag, window := m.st, m.scanner, m.agy, m.sessionRange
 	return func() tea.Msg {
 		runs, _ := st.List()
-		sessions, _ := sc.Scan(sessionAge, sessionLimit)
-		agySessions, _ := ag.Scan(sessionAge, sessionLimit)
+		sessions, _ := sc.Scan(scanAge(window), 0)
+		agySessions, _ := ag.Scan(scanAge(window), 0)
 		sessions = append(sessions, agySessions...)
-		return dataMsg{runs: runs, sessions: sessions, live: claude.LiveProcesses(), tick: tick}
+		return dataMsg{runs: runs, sessions: sessions, live: claude.LiveProcesses(), tick: tick, sessionRange: window}
 	}
 }
 
@@ -195,10 +199,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dataMsg:
 		m.loading, m.loaded = false, true
-		m.runs, m.sessions, m.live = msg.runs, msg.sessions, msg.live
+		m.runs, m.sessions, m.live, m.scannedRange = msg.runs, msg.sessions, msg.live, msg.sessionRange
 		m.reselect()
 		m.loadPreview()
 		m.loadLog()
+		if msg.sessionRange != m.sessionRange {
+			return m, m.load(msg.tick) // the range changed during that scan
+		}
 		if msg.tick {
 			return m, tea.Tick(refreshEvery, func(time.Time) tea.Msg { return refreshMsg{} })
 		}
@@ -336,6 +343,15 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.screen == screenMain && m.tab != tabRuns {
+		switch k {
+		case "t":
+			return m, m.setSessionRange(nextRange(m.sessionRange))
+		case "T":
+			m.openInput("range", "12h, 14d, 2w, 3mo, 1y or all", formatRange(m.sessionRange))
+		}
+	}
+
 	if m.screen == screenMain && m.tab == tabRuns {
 		r := m.selectedRun()
 		switch k {
@@ -409,6 +425,14 @@ func (m *model) keyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.inputPurpose == "new" && val != "" {
 			return m, m.startRun(val)
 		}
+		if m.inputPurpose == "range" && val != "" {
+			d, err := parseRange(val)
+			if err != nil {
+				m.setFlash(err.Error(), true)
+				return m, nil
+			}
+			return m, m.setSessionRange(d)
+		}
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -418,6 +442,19 @@ func (m *model) keyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.reselect()
 	}
 	return m, cmd
+}
+
+// setSessionRange changes how far back the session tabs reach and remembers
+// it for next time.
+func (m *model) setSessionRange(d time.Duration) tea.Cmd {
+	m.sessionRange = d
+	if err := m.saveSessionRange(); err != nil {
+		m.setFlash("Couldn't save the range: "+err.Error(), true)
+	}
+	if m.loading {
+		return nil // the scan in flight sees the change when it reports back
+	}
+	return m.load(false)
 }
 
 func (m *model) openInput(purpose, placeholder, value string) {

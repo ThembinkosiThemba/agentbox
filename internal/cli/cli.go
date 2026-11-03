@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -503,16 +504,19 @@ func cmdPrune(st *store.Store, args []string) int {
 func cmdSessions(_ *store.Store, args []string) int {
 	fs := newFlags("sessions")
 	asJSON := fs.boolVar(false, "Print JSON", "json")
-	days := fs.intVar(3, "Include sessions active within this many days", "days")
+	days := fs.intVar(3, "Include sessions active within this many days (0 for all)", "days")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	age := time.Duration(*days) * 24 * time.Hour
-	sessions, err := claude.NewScanner().Scan(age, 100)
+	if *days <= 0 {
+		age = math.MaxInt64
+	}
+	sessions, err := claude.NewScanner().Scan(age, 0)
 	if err != nil {
 		return die(err)
 	}
-	agySessions, err := agy.NewScanner().Scan(age, 100)
+	agySessions, err := agy.NewScanner().Scan(age, 0)
 	if err != nil {
 		return die(err)
 	}

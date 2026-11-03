@@ -140,7 +140,7 @@ func (m *model) viewFooter() string {
 		hints = []hint{{"←→", "tabs"}, {"↑↓", "select"}, {"enter", "logs"}, {"n", "new"}, {"x", "stop"}, {"r", "restart"},
 			{"d", "delete"}, {"/", "filter"}}
 	default:
-		hints = []hint{{"←→", "tabs"}, {"↑↓", "select"}, {"enter", "open"}, {"/", "filter"}}
+		hints = []hint{{"←→", "tabs"}, {"↑↓", "select"}, {"enter", "open"}, {"/", "filter"}, {"t", "range"}, {"T", "custom range"}}
 	}
 	hints = append(hints, hint{"?", "help"}, hint{"q", "quit"})
 
@@ -346,7 +346,10 @@ func (m *model) viewSessions(w, h int) string {
 		if m.tab == tabAgy {
 			name, dir = "Antigravity", agy.DataDir()
 		}
-		msg := []string{sBold.Render("No " + name + " sessions in the last 7 days"), "", sMuted.Render("Looked in " + dir)}
+		msg := []string{sBold.Render("No " + name + " sessions"), sMuted.Render(rangeLabel(m.sessionRange)), "", sMuted.Render("Looked in " + dir)}
+		if m.sessionRange != allTime {
+			msg = append(msg, "", sMuted.Render("Press t for a longer range"))
+		}
 		if !m.loaded {
 			msg = []string{sMuted.Render(m.spin() + " reading sessions…")}
 		} else if m.filter != "" {
@@ -382,6 +385,10 @@ func (m *model) viewSessions(w, h int) string {
 	heading := "Claude Code sessions"
 	if m.tab == tabAgy {
 		heading = "Antigravity sessions"
+	}
+	heading += " · " + rangeLabel(m.sessionRange)
+	if m.scannedRange != m.sessionRange {
+		heading += " " + m.spin() // a wide range can take seconds to read
 	}
 	left := panel(heading, count, listLines, lw, lh, true)
 
@@ -727,6 +734,7 @@ func (m *model) viewHelp() string {
 		{"Everywhere", []kv{{"← → · tab", "switch between tabs"}, {"↑↓ · j k", "move"}, {"g · G", "first · last"},
 			{"enter", "open"}, {"esc", "back / clear filter"}, {"/", "filter"}, {"q", "quit"}}},
 		{"Runs", []kv{{"n", "start a command here"}, {"x", "stop the run and its process tree"}, {"r", "restart"}, {"d", "delete"}}},
+		{"Sessions", []kv{{"t", "next range: 1d, 3d, 7d, 30d, 90d, all"}, {"T", "type a range: 12h, 14d, 2w, 3mo, 1y, all"}}},
 		{"Logs", []kv{{"f", "follow output"}, {"w", "wrap lines"}, {"PgUp PgDn", "page"}}},
 	}
 	var lines []string
@@ -757,6 +765,11 @@ func (m *model) viewInput() string {
 	if m.inputPurpose == "new" {
 		title = "New run"
 		lines = append(lines, sMuted.Render("Runs detached through the shell in"), sText.Render(trunc(m.cwd, w-4)), "")
+	}
+	if m.inputPurpose == "range" {
+		title = "Session range"
+		lines = append(lines, sMuted.Render(trunc("How far back to show sessions.", w-4)),
+			sMuted.Render(trunc("Examples: 12h, 14d, 2w, 3mo, 1y, all", w-4)), "")
 	}
 	lines = append(lines, m.input.View())
 	return box(title, lines, w)
