@@ -8,6 +8,7 @@ import (
 
 	"agentbox/internal/agy"
 	"agentbox/internal/claude"
+	"agentbox/internal/opencode"
 )
 
 func TestTabKeys(t *testing.T) {
@@ -33,11 +34,15 @@ func TestTabKeysCycle(t *testing.T) {
 		}
 	}
 	press(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")}, tabAgy)
+	press(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("4")}, tabOpenCode)
 	press(tea.KeyMsg{Type: tea.KeyTab}, tabRuns)
+	press(tea.KeyMsg{Type: tea.KeyShiftTab}, tabOpenCode)
 	press(tea.KeyMsg{Type: tea.KeyShiftTab}, tabAgy)
 	press(tea.KeyMsg{Type: tea.KeyShiftTab}, tabClaude)
 	press(tea.KeyMsg{Type: tea.KeyRight}, tabAgy)
-	press(tea.KeyMsg{Type: tea.KeyRight}, tabAgy) // stops at the last tab
+	press(tea.KeyMsg{Type: tea.KeyRight}, tabOpenCode)
+	press(tea.KeyMsg{Type: tea.KeyRight}, tabOpenCode) // stops at the last tab
+	press(tea.KeyMsg{Type: tea.KeyLeft}, tabAgy)
 	press(tea.KeyMsg{Type: tea.KeyLeft}, tabClaude)
 	press(tea.KeyMsg{Type: tea.KeyLeft}, tabRuns)
 	press(tea.KeyMsg{Type: tea.KeyLeft}, tabRuns) // and at the first
@@ -46,7 +51,10 @@ func TestTabKeysCycle(t *testing.T) {
 // Each agent's tab lists only its own sessions and keeps its own selection.
 func TestSessionTabs(t *testing.T) {
 	m := fixture(t)
-	m.sessions = append(m.sessions, &claude.Session{Agent: agy.Agent, ID: "second-agy", Title: "Second", ModTime: m.now.Add(-time.Hour)})
+	m.sessions = append(m.sessions,
+		&claude.Session{Agent: agy.Agent, ID: "second-agy", Title: "Second", ModTime: m.now.Add(-time.Hour)},
+		&claude.Session{Agent: opencode.Agent, ID: "third-oc", Title: "Third", ModTime: m.now.Add(-2 * time.Hour)},
+	)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	m.switchTab(tabClaude)
@@ -57,6 +65,17 @@ func TestSessionTabs(t *testing.T) {
 	if ss := m.visibleSessions(); len(ss) != 2 || ss[0].Agent != agy.Agent {
 		t.Fatalf("Agy tab lists %d sessions", len(ss))
 	}
+	m.switchTab(tabOpenCode)
+	if ss := m.visibleSessions(); len(ss) != 2 {
+		t.Fatalf("OpenCode tab lists %d sessions", len(ss))
+	} else {
+		for _, s := range ss {
+			if s.Agent != opencode.Agent {
+				t.Fatalf("OpenCode tab listed %q", s.Agent)
+			}
+		}
+	}
+	m.switchTab(tabAgy)
 	if s := m.selectedSession(); s == nil || s.Agent != agy.Agent {
 		t.Fatalf("Agy tab selected %+v", s)
 	}
@@ -94,6 +113,10 @@ func TestClickTabs(t *testing.T) {
 	click(m.tabHits[tabAgy][0]+1, 0)
 	if m.tab != tabAgy {
 		t.Fatalf("clicking Agy label: tab = %d", m.tab)
+	}
+	click(m.tabHits[tabOpenCode][0]+1, 0)
+	if m.tab != tabOpenCode {
+		t.Fatalf("clicking OpenCode label: tab = %d", m.tab)
 	}
 	click(m.tabHits[tabRuns][0]+1, 0)
 	if m.tab != tabRuns {

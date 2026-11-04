@@ -7,11 +7,13 @@ agentbox is a Go TUI + CLI that shows and manages commands run by coding agents.
 ```
 main.go                     entry; hands off to internal/cli
 internal/cli                command parsing and output (flags anywhere: `logs abc -f`)
+internal/guide              `agentbox guide`: the agent instructions and installing them into agent files
 internal/store              on-disk run records: meta.json, output.log, heartbeat, kill marker
 internal/supervisor         Create / SpawnDetached / Supervise / Kill: the run lifecycle
 internal/proc               platform code: proc_windows.go (Job Objects), proc_unix.go (process groups)
 internal/claude             read-only, incremental parser for ~/.claude/projects/*/*.jsonl; also the Session/Exec/Task types every agent's sessions use
 internal/agy                the same for Antigravity CLI: ~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript_full.jsonl
+internal/opencode           read-only, incremental reader for OpenCode's SQLite DB: ~/.local/share/opencode/opencode.db
 internal/tui                Bubble Tea dashboard: tui.go (model/update), view.go, layout.go, styles.go
 internal/human              duration/time/size formatting
 internal/launcher           `agentbox shortcut`: Start menu .lnk (via PowerShell), Linux .desktop, macOS .command
@@ -28,6 +30,7 @@ winres/, rsrc_windows_*.syso    icon + version resources linked into agentbox.ex
 - Exit codes are part of the CLI contract (see docs/cli.md). Never pass through a stopped process's raw code: on Windows it is an NTSTATUS value that shells treat as an interrupt.
 - Don't open log files with `O_APPEND` for children. On Windows that creates an append-only handle that Git Bash children can't write through.
 - Every TUI line must fit the terminal exactly. `TestViewFitsTerminal` checks this across sizes and screens. Use `fit`/`trunc` from layout.go, never raw `len` on styled strings.
+- A run's output carries the command's own colours. `sanitize` keeps SGR sequences, drops every other escape sequence and seals the line; only use `plain` when embedding output in a line that has a colour of its own. Children are started with colour forced on, so strip it at the CLI edge when stdout is not a terminal.
 
 ## Working on it
 

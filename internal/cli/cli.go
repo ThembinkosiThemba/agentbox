@@ -4,23 +4,29 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-isatty"
 
 	"agentbox/internal/agy"
 	"agentbox/internal/claude"
+	"agentbox/internal/guide"
 	"agentbox/internal/human"
 	"agentbox/internal/launcher"
+	"agentbox/internal/opencode"
 	"agentbox/internal/store"
 	"agentbox/internal/supervisor"
 	"agentbox/internal/tui"
@@ -58,8 +64,8 @@ func init() {
 		{"restart", nil, "<id>", "Start a run's command again, detached", cmdRestart},
 		{"rm", nil, "[-f] <id>...", "Delete finished runs", cmdRm},
 		{"prune", nil, "[--older-than 24h]", "Delete all finished runs", cmdPrune},
-		{"sessions", nil, "[id] [--json] [--days 3]", "List Claude Code and Antigravity sessions, or show one", cmdSessions},
-		{"guide", nil, "", "Print instructions to give coding agents (for CLAUDE.md / GEMINI.md / AGENTS.md)", cmdGuide},
+		{"sessions", nil, "[id] [--json] [--days 3]", "List Claude Code, Antigravity and OpenCode sessions, or show one", cmdSessions},
+		{"guide", nil, "[--install|--remove] [--project] [--agent names]", "Print or install instructions for coding agents", cmdGuide},
 		{"shortcut", nil, "[--desktop] [--remove]", "Add agentbox to the Start menu / app launcher, to pin it", cmdShortcut},
 		{"tui", []string{"ui"}, "", "Open the dashboard (default with no command)", cmdTUI},
 		{"version", nil, "", "Print the version", func(*store.Store, []string) int { fmt.Println("agentbox", Version); return 0 }},
@@ -306,7 +312,7 @@ func cmdLogs(st *store.Store, args []string) int {
 			return die(err)
 		}
 		for _, l := range lines {
-			fmt.Println(l)
+			printLogLine(l)
 		}
 		if fi, err := os.Stat(path); err == nil {
 			offset = fi.Size()
@@ -337,8 +343,37 @@ func copyFrom(path string, offset int64) int64 {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return offset
 	}
-	n, _ := io.Copy(os.Stdout, f)
-	return offset + n
+	if stdoutIsTTY() {
+		n, _ := io.Copy(os.Stdout, f)
+		return offset + n
+	}
+	// The log carries the command's colours; strip them when our own output
+	// is piped, where the CLI promises plain text.
+	br := bufio.NewReader(f)
+	var n int64
+	for {
+		line, err := br.ReadString('\n')
+		n += int64(len(line))
+		if line != "" {
+			fmt.Print(ansi.Strip(line))
+		}
+		if err != nil {
+			return offset + n
+		}
+	}
+}
+
+// printLogLine prints one line of a run's output, plainly when stdout is
+// not a terminal.
+func printLogLine(line string) {
+	if !stdoutIsTTY() {
+		line = ansi.Strip(line)
+	}
+	fmt.Println(line)
+}
+
+func stdoutIsTTY() bool {
+	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 }
 
 func cmdWait(st *store.Store, args []string) int {
@@ -370,7 +405,7 @@ func cmdWait(st *store.Store, args []string) int {
 			fmt.Println(dim(fmt.Sprintf("… (last %d lines; agentbox logs %s for all)", len(lines), r.ID)))
 		}
 		for _, l := range lines {
-			fmt.Println(l)
+			printLogLine(l)
 		}
 	}
 	fmt.Fprintf(os.Stderr, "agentbox: %s %s after %s\n", r.ID, statusText(r), human.Duration(r.Duration(time.Now())))
@@ -521,6 +556,13 @@ func cmdSessions(_ *store.Store, args []string) int {
 		return die(err)
 	}
 	sessions = append(sessions, agySessions...)
+	ocScanner := opencode.NewScanner()
+	ocSessions, err := ocScanner.Scan(age, 0)
+	ocScanner.Close()
+	if err != nil {
+		return die(err)
+	}
+	sessions = append(sessions, ocSessions...)
 	sort.SliceStable(sessions, func(i, j int) bool { return sessions[i].ModTime.After(sessions[j].ModTime) })
 	now := time.Now()
 	if ref := fs.Arg(0); ref != "" {
@@ -550,7 +592,7 @@ func cmdSessions(_ *store.Store, args []string) int {
 		return 0
 	}
 	if len(sessions) == 0 {
-		fmt.Println(dim("No agent sessions found in " + claude.ConfigDir() + " or " + agy.DataDir()))
+		fmt.Println(dim("No agent sessions found in " + claude.ConfigDir() + ", " + agy.DataDir() + " or " + opencode.DataDir()))
 		return 0
 	}
 	var rows [][]string
@@ -612,37 +654,82 @@ func printSession(s *claude.Session, now time.Time) int {
 	return 0
 }
 
-const guide = `## Long-running commands: use agentbox
+func cmdGuide(_ *store.Store, args []string) int {
+	fs := newFlags("guide")
+	install := fs.boolVar(false, "Write the guide into your agents' instruction files", "install")
+	remove := fs.boolVar(false, "Remove the guide from your agents' instruction files", "remove")
+	project := fs.boolVar(false, "Use files in the current project instead of user-wide files", "project")
+	all := fs.boolVar(false, "Include every supported agent, not only those found on this machine", "all")
+	agent := fs.stringsVar("Install for these agents only (claude, antigravity, opencode, codex); repeatable", "agent")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if !*install && !*remove {
+		fmt.Print(guide.Content)
+		return 0
+	}
+	if *install && *remove {
+		return die(errors.New("use either --install or --remove, not both"))
+	}
 
-This machine has ` + "`agentbox`" + `, which runs commands outside your shell tool's time limit
-and lets the user watch and manage them in a dashboard. Use it for any command that may
-take more than about a minute (builds, test suites, installs, migrations, dev servers)
-instead of running it directly or with run_in_background.
+	var targets []guide.Target
+	var err error
+	switch {
+	case len(*agent) > 0:
+		targets, err = guide.Select(splitList(*agent))
+		if err != nil {
+			return die(err)
+		}
+	case *all || *remove:
+		targets = guide.Targets()
+	default:
+		targets = guide.Detected()
+		if len(targets) == 0 {
+			return die(errors.New("no supported coding agents found; name one with --agent claude, antigravity, opencode or codex"))
+		}
+	}
 
-` + "```" + `sh
-agentbox run -d --name build --title "Build the web app" -- "npm run build"
-                                     # start detached; prints the run id
-agentbox wait build --timeout 8m     # block until done; exits with the command's code
-agentbox logs build -n 50            # last 50 lines of output (-f to follow)
-agentbox status build                # status, exit code, duration
-agentbox kill build                  # stop it and everything it started
-agentbox ls                          # all runs
-` + "```" + `
-
-- A single quoted argument runs through the shell (pipes, &&, env vars work).
-- ` + "`wait`" + ` exits with the command's own code. If its --timeout expires first it exits 75
-  and the run keeps going: call ` + "`agentbox wait`" + ` again instead of restarting the command.
-  Keep --timeout below your shell tool's limit.
-- Use ` + "`--timeout 30m`" + ` on ` + "`run`" + ` to cap how long a command may run (exit 124 when hit).
-  A run that was stopped exits 137.
-- Start dev servers with ` + "`run -d`" + ` and leave them running; the user can see and stop them.
-- Names are reusable: the newest run with a name wins.
-- Give every run a short ` + "`--title`" + ` saying what it is for, in plain words. The user reads
-  it in the dashboard; the name is for you to refer to the run.
-`
-
-func cmdGuide(*store.Store, []string) int {
-	fmt.Print(guide)
+	cwd, _ := os.Getwd()
+	seen := make(map[string]bool)
+	changed := 0
+	for _, t := range targets {
+		path := t.Global
+		if *project {
+			path = filepath.Join(cwd, t.Project)
+		}
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		if *remove {
+			ok, err := guide.Remove(path)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "agentbox:", err)
+				return 1
+			}
+			if ok {
+				fmt.Println("removed", displayPath(path))
+				changed++
+			}
+			continue
+		}
+		change, err := guide.Install(path, guide.Content)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "agentbox:", err)
+			return 1
+		}
+		if change != guide.Unchanged {
+			fmt.Println(change, displayPath(path))
+			changed++
+		}
+	}
+	if changed == 0 {
+		if *remove {
+			fmt.Println("nothing to remove")
+		} else {
+			fmt.Println("already up to date")
+		}
+	}
 	return 0
 }
 
@@ -769,6 +856,34 @@ func baseName(p string) string {
 		return p[i+1:]
 	}
 	return p
+}
+
+func splitList(values []string) []string {
+	var out []string
+	for _, v := range values {
+		for _, part := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }) {
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
+}
+
+// displayPath shortens a path under the home directory or the working
+// directory to ~ or a relative path, for messages.
+func displayPath(path string) string {
+	if home, err := os.UserHomeDir(); err == nil {
+		if rel, err := filepath.Rel(home, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return "~" + string(os.PathSeparator) + rel
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(cwd, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return rel
+		}
+	}
+	return path
 }
 
 func contains(xs []string, s string) bool {

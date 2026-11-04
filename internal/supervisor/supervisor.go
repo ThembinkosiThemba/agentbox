@@ -65,6 +65,32 @@ func Create(st *store.Store, o Options) (*store.Run, error) {
 	return r, nil
 }
 
+// childEnv is the environment a run's command starts with. The child writes
+// to a log file rather than a terminal, which most tools read as "no colour";
+// these settings keep it. NO_COLOR (or AGENTBOX_NO_COLOR) turns that off, and
+// values already set are left alone so a caller can choose the level.
+func childEnv() []string {
+	env := os.Environ()
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("AGENTBOX_NO_COLOR") != "" {
+		return env
+	}
+	have := make(map[string]bool, len(env))
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		have[strings.ToUpper(k)] = true
+	}
+	add := func(key, val string) {
+		if !have[strings.ToUpper(key)] {
+			env = append(env, key+"="+val)
+		}
+	}
+	add("FORCE_COLOR", "3")    // node, npm, rich, and other chalk-alikes
+	add("CLICOLOR_FORCE", "1") // tools that follow the CLICOLOR convention
+	add("COLORTERM", "truecolor")
+	add("TERM", "xterm-256color")
+	return env
+}
+
 func attribute(r *store.Run) {
 	switch {
 	case os.Getenv("AGENTBOX_AGENT") != "":
@@ -76,6 +102,9 @@ func attribute(r *store.Run) {
 	case os.Getenv("ANTIGRAVITY_CONVERSATION_ID") != "":
 		r.Agent = "antigravity"
 		r.SessionID = os.Getenv("ANTIGRAVITY_CONVERSATION_ID")
+	case os.Getenv("OPENCODE_SESSION_ID") != "" || os.Getenv("OPENCODE") != "":
+		r.Agent = "opencode"
+		r.SessionID = os.Getenv("OPENCODE_SESSION_ID")
 	case os.Getenv("AI_AGENT") != "":
 		r.Agent, _, _ = strings.Cut(os.Getenv("AI_AGENT"), "_")
 	}
@@ -129,7 +158,7 @@ func Supervise(st *store.Store, id string, foreground bool) (int, error) {
 
 	cmd, shell := proc.Command(r.Command, r.UseShell)
 	cmd.Dir = r.Cwd
-	cmd.Env = append(os.Environ(), "AGENTBOX_RUN_ID="+r.ID)
+	cmd.Env = append(childEnv(), "AGENTBOX_RUN_ID="+r.ID)
 	cmd.WaitDelay = 2 * time.Second
 	if foreground {
 		// Piped input is forwarded. A terminal is not: the child sits in its

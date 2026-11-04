@@ -3,6 +3,7 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -10,16 +11,17 @@ import (
 
 func width(s string) int { return ansi.StringWidth(s) }
 
-// fit truncates or pads s to exactly w cells.
+// fit truncates or pads s to exactly w cells. Colour is closed before any
+// padding goes on, so the terminal's own colours fill the gap.
 func fit(s string, w int) string {
 	if w <= 0 {
 		return ""
 	}
 	if width(s) > w {
-		s = ansi.Truncate(s, w, "…")
+		s = seal(ansi.Truncate(s, w, "…"))
 	}
 	if pad := w - width(s); pad > 0 {
-		s += strings.Repeat(" ", pad)
+		s = seal(s) + strings.Repeat(" ", pad)
 	}
 	return s
 }
@@ -82,10 +84,13 @@ type row struct {
 	title      string
 	hint       string // faint text after the title, when there is room
 	right      string
+	subLead    string // first part of the second line, coloured on its own: an id or a tool
 	sub        string
 	subRight   string
 
+	titleColor              lipgloss.TerminalColor // default text colour
 	subColor, subRightColor lipgloss.TerminalColor // default muted, faint
+	subLeadColor            lipgloss.TerminalColor // default cyan
 }
 
 // renderList draws rows into w×h cells, keeping sel visible by adjusting
@@ -136,8 +141,11 @@ func renderRow(r row, w int, selected, focused bool) []string {
 	}
 
 	titleStyle := sText
+	if r.titleColor != nil {
+		titleStyle = fg(r.titleColor)
+	}
 	if selected {
-		titleStyle = sBold
+		titleStyle = titleStyle.Bold(true)
 	}
 	gc := r.glyphColor
 	if gc == nil {
@@ -161,16 +169,23 @@ func renderRow(r row, w int, selected, focused bool) []string {
 	l1 := bar + glyph + badge + seg(titleStyle, title) + hint +
 		pad(avail-width(badge)-width(title)-width(hint)-width(right)) + seg(sMuted, right)
 
-	subStyle, subRightStyle := sMuted, sFaint
+	subStyle, subRightStyle, subLeadStyle := sMuted, sFaint, sCmd
 	if r.subColor != nil {
 		subStyle = fg(r.subColor)
 	}
 	if r.subRightColor != nil {
 		subRightStyle = fg(r.subRightColor)
 	}
+	if r.subLeadColor != nil {
+		subLeadStyle = fg(r.subLeadColor)
+	}
 	subRight := trunc(r.subRight, max(avail/3, 0))
-	sub := trunc(oneLine(r.sub), max(avail-width(subRight)-1, 0))
-	l2 := bar + pad(2) + seg(subStyle, sub) + pad(avail-width(sub)-width(subRight)) + seg(subRightStyle, subRight)
+	subLead := ""
+	if l := oneLine(r.subLead); l != "" {
+		subLead = seg(subLeadStyle, trunc(l, max(avail/3, 0))) + pad(1)
+	}
+	sub := trunc(oneLine(r.sub), max(avail-width(subLead)-width(subRight)-1, 0))
+	l2 := bar + pad(2) + subLead + seg(subStyle, sub) + pad(avail-width(subLead)-width(sub)-width(subRight)) + seg(subRightStyle, subRight)
 	return []string{l1, l2}
 }
 
@@ -187,10 +202,12 @@ func center(lines []string, w, h int) []string {
 	return out
 }
 
-// sanitize makes raw process output safe to draw: escape sequences go,
-// carriage-return progress bars keep their final state, tabs expand.
+// sanitize makes raw process output safe to draw: colour (SGR) codes are
+// kept so a command's own colours survive, every other escape sequence and
+// control character is dropped, carriage-return progress bars keep their
+// final state, and tabs expand.
 func sanitize(s string) string {
-	s = ansi.Strip(s)
+	s = keepColor(s)
 	if i := strings.LastIndexByte(s, '\r'); i >= 0 {
 		if rest := s[i+1:]; rest != "" {
 			s = rest
@@ -204,7 +221,20 @@ func sanitize(s string) string {
 	if strings.ContainsAny(s, "\t\x00\x07\x08\x0b\x0c\x1b") {
 		var b strings.Builder
 		col := 0
-		for _, r := range s {
+		for i := 0; i < len(s); {
+			if isEscape(s[i:]) {
+				seq, _, n, _ := ansi.DecodeSequence(s[i:], 0, nil)
+				if n <= 0 {
+					break
+				}
+				if isSGR(seq) {
+					b.WriteString(seq)
+				}
+				i += n
+				continue
+			}
+			r, size := utf8.DecodeRuneInString(s[i:])
+			i += size
 			switch {
 			case r == '\t':
 				n := 4 - col%4
@@ -213,10 +243,58 @@ func sanitize(s string) string {
 			case r < 0x20 || r == 0x7f:
 			default:
 				b.WriteRune(r)
-				col++
+				col += ansi.StringWidth(string(r))
 			}
 		}
 		s = b.String()
+	}
+	return seal(s)
+}
+
+// plain is sanitized text with its colour removed, for output that goes into
+// a line that has a colour of its own.
+func plain(s string) string { return ansi.Strip(sanitize(s)) }
+
+// keepColor drops ANSI escape sequences from s, except the SGR (colour and
+// text attribute) sequences that a command writes to colour its output.
+func keepColor(s string) string {
+	if !strings.ContainsRune(s, 0x1b) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		seq, _, n, _ := ansi.DecodeSequence(s[i:], 0, nil)
+		if n <= 0 {
+			break
+		}
+		if !isEscape(seq) || isSGR(seq) {
+			b.WriteString(seq)
+		}
+		i += n
+	}
+	return b.String()
+}
+
+// isEscape reports whether seq introduces a terminal escape sequence: 7-bit
+// (ESC …) or 8-bit (C1 …).
+func isEscape(seq string) bool {
+	return seq[0] == 0x1b || (seq[0] >= 0x80 && seq[0] <= 0x9f)
+}
+
+// isSGR reports whether seq is a colour/text-attribute sequence, the only
+// escape sequences that are safe and useful to draw.
+func isSGR(seq string) bool {
+	if len(seq) < 2 || seq[len(seq)-1] != 'm' {
+		return false
+	}
+	return seq[0] == 0x9b || (seq[0] == 0x1b && seq[1] == '[')
+}
+
+// seal closes colour left open at the end of s, so a command's colour can
+// never bleed into a panel border or the next line.
+func seal(s string) string {
+	if strings.Contains(s, "\x1b[") && !strings.HasSuffix(s, "\x1b[0m") {
+		return s + "\x1b[0m"
 	}
 	return s
 }
@@ -229,10 +307,12 @@ func wrap(lines []string, w int) []string {
 	out := make([]string, 0, len(lines))
 	for _, l := range lines {
 		if width(l) <= w {
-			out = append(out, l)
+			out = append(out, seal(l))
 			continue
 		}
-		out = append(out, strings.Split(ansi.Wrap(l, w, ""), "\n")...)
+		for _, s := range strings.Split(ansi.Wrap(l, w, ""), "\n") {
+			out = append(out, seal(s))
+		}
 	}
 	return out
 }

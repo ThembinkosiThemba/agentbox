@@ -12,6 +12,7 @@ import (
 	"agentbox/internal/agy"
 	"agentbox/internal/claude"
 	"agentbox/internal/human"
+	"agentbox/internal/opencode"
 	"agentbox/internal/store"
 )
 
@@ -71,18 +72,22 @@ func (m *model) viewHeader() string {
 		return sTabOff.Render(label)
 	}
 	logo := sLogo.Render("agentbox") + "  "
-	agySessions := 0
+	agySessions, ocSessions := 0, 0
 	for _, s := range m.sessions {
-		if s.Agent == agy.Agent {
+		switch s.Agent {
+		case agy.Agent:
 			agySessions++
+		case opencode.Agent:
+			ocSessions++
 		}
 	}
 	left := logo
 	x := width(logo)
 	for i, label := range []string{
-		tabRuns:   tabLabel(tabRuns, "Runs", len(m.runs)),
-		tabClaude: tabLabel(tabClaude, "Claude", len(m.sessions)-agySessions),
-		tabAgy:    tabLabel(tabAgy, "Agy", agySessions),
+		tabRuns:     tabLabel(tabRuns, "Runs", len(m.runs)),
+		tabClaude:   tabLabel(tabClaude, "Claude", len(m.sessions)-agySessions-ocSessions),
+		tabAgy:      tabLabel(tabAgy, "Agy", agySessions),
+		tabOpenCode: tabLabel(tabOpenCode, "OpenCode", ocSessions),
 	} {
 		if i > 0 {
 			left += " "
@@ -197,7 +202,7 @@ func (m *model) viewRuns(w, h int) string {
 		rows := make([]row, len(runs))
 		for i, r := range runs {
 			glyph, c, _ := m.runLook(r.Status)
-			parts := []string{r.ID}
+			var parts []string
 			if r.Name != "" && r.Title != "" {
 				parts = append(parts, r.Name)
 			}
@@ -205,8 +210,8 @@ func (m *model) viewRuns(w, h int) string {
 			if r.Title != "" || r.Name != "" {
 				parts = append(parts, oneLine(r.CommandLine()))
 			}
-			rw := row{glyph: glyph, glyphColor: c, title: r.DisplayName(), right: human.Duration(r.Duration(m.now)),
-				sub: strings.Join(parts, " · "), subRight: whoShort(r.Agent) + " · " + human.Ago(r.CreatedAt, m.now)}
+			rw := row{glyph: glyph, glyphColor: c, titleColor: c, title: r.DisplayName(), right: human.Duration(r.Duration(m.now)),
+				subLead: r.ID, sub: strings.Join(parts, " · "), subRight: whoShort(r.Agent) + " · " + human.Ago(r.CreatedAt, m.now)}
 			if x := r.ExitText(); x != "" && x != "0" {
 				rw.subRight, rw.subRightColor = "exit "+x, cRed
 			}
@@ -266,7 +271,7 @@ func (m *model) runDetail(r *store.Run, w, h int) []string {
 		if i == 0 {
 			p = sAccent.Render("$ ")
 		}
-		lines = append(lines, p+sText.Render(l))
+		lines = append(lines, p+sCmd.Render(l))
 	}
 	lines = append(lines, "")
 
@@ -343,8 +348,11 @@ func (m *model) viewSessions(w, h int) string {
 	var listLines []string
 	if len(ss) == 0 {
 		name, dir := "Claude Code", claude.ConfigDir()
-		if m.tab == tabAgy {
+		switch m.tab {
+		case tabAgy:
 			name, dir = "Antigravity", agy.DataDir()
+		case tabOpenCode:
+			name, dir = "OpenCode", opencode.DataDir()
 		}
 		msg := []string{sBold.Render("No " + name + " sessions"), sMuted.Render(rangeLabel(m.sessionRange)), "", sMuted.Render("Looked in " + dir)}
 		if m.sessionRange != allTime {
@@ -363,9 +371,9 @@ func (m *model) viewSessions(w, h int) string {
 			if s.Active(m.now) {
 				glyph, c = "●", cGreen
 			}
-			sub := baseName(s.Cwd)
+			branch := ""
 			if s.Branch != "" && s.Branch != "HEAD" {
-				sub += " ⎇ " + s.Branch
+				branch = "⎇ " + s.Branch
 			}
 			subRight := itoa(len(s.Execs)) + " cmds"
 			if n := s.RunningTasks(m.now); n > 0 {
@@ -373,8 +381,8 @@ func (m *model) viewSessions(w, h int) string {
 			} else if len(s.Tasks) > 0 {
 				subRight += " · " + itoa(len(s.Tasks)) + " bg"
 			}
-			rows[i] = row{glyph: glyph, glyphColor: c, title: s.DisplayTitle(), right: human.Ago(s.ModTime, m.now),
-				sub: sub, subRight: subRight}
+			rows[i] = row{glyph: glyph, glyphColor: c, titleColor: cBlue, title: s.DisplayTitle(), right: human.Ago(s.ModTime, m.now),
+				subLead: baseName(s.Cwd), sub: branch, subRight: subRight}
 		}
 		listLines = renderList(rows, m.sesSel, &m.sesOff, lw-4, lh-2, true)
 	}
@@ -383,8 +391,11 @@ func (m *model) viewSessions(w, h int) string {
 		count = fmt.Sprintf("%d/%d", m.sesSel+1, len(ss))
 	}
 	heading := "Claude Code sessions"
-	if m.tab == tabAgy {
+	switch m.tab {
+	case tabAgy:
 		heading = "Antigravity sessions"
+	case tabOpenCode:
+		heading = "OpenCode sessions"
 	}
 	heading += " · " + rangeLabel(m.sessionRange)
 	if m.scannedRange != m.sessionRange {
@@ -526,23 +537,23 @@ func (m *model) viewSession(w, h int) string {
 		for i, it := range items {
 			if t := it.task; t != nil {
 				g, c, _ := m.taskLook(t.State(s, m.now))
-				sub := "bg " + t.ID
+				cmd := ""
 				if t.Command != "" {
-					sub += " · " + oneLine(claude.ShortCommand(t.Command))
+					cmd = oneLine(claude.ShortCommand(t.Command))
 				}
-				rows[i] = row{glyph: g, glyphColor: c, title: taskTitle(t), right: human.Duration(t.Duration(s, m.now)),
-					sub: sub, subRight: human.Clock(t.Start, m.now)}
+				rows[i] = row{glyph: g, glyphColor: c, titleColor: c, title: taskTitle(t), right: human.Duration(t.Duration(s, m.now)),
+					subLead: "bg " + t.ID, sub: cmd, subRight: human.Clock(t.Start, m.now)}
 				continue
 			}
 			e := it.exec
 			g, c := m.execLook(e)
 			badge, title, hint := m.execLabel(e)
-			sub := e.Tool
+			cmd := ""
 			if hint != "" || badge != "" || e.Description != "" {
-				sub += " · " + oneLine(claude.ShortCommand(e.Command))
+				cmd = oneLine(claude.ShortCommand(e.Command))
 			}
-			rw := row{glyph: g, glyphColor: c, badge: badge, title: title, right: human.Duration(e.Duration(m.now)),
-				sub: sub, subRight: human.Clock(e.Start, m.now)}
+			rw := row{glyph: g, glyphColor: c, titleColor: c, badge: badge, title: title, right: human.Duration(e.Duration(m.now)),
+				subLead: e.Tool, sub: cmd, subRight: human.Clock(e.Start, m.now)}
 			if e.IsError && e.Done() {
 				if l := errorLine(e.Output); l != "" {
 					rw.sub, rw.subColor = l, cRed
@@ -582,7 +593,7 @@ func (m *model) commandLines(cmd string, w, maxLines int) []string {
 		if i == 0 {
 			p = sAccent.Render("$ ")
 		}
-		out = append(out, p+sText.Render(sanitize(l)))
+		out = append(out, p+sCmd.Render(sanitize(l)))
 	}
 	return out
 }
@@ -834,6 +845,8 @@ func whoShort(agent string) string {
 		return "claude"
 	case agy.Agent:
 		return "agy"
+	case opencode.Agent:
+		return "opencode"
 	}
 	return agent
 }

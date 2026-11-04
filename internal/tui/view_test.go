@@ -11,6 +11,7 @@ import (
 
 	"agentbox/internal/agy"
 	"agentbox/internal/claude"
+	"agentbox/internal/opencode"
 	"agentbox/internal/store"
 )
 
@@ -57,8 +58,29 @@ func fixture(t *testing.T) *model {
 				IsError: true, Output: "Exit code 1\n\nbuild failed"},
 		},
 		Tasks: []*claude.Task{{ID: "task-2", Command: "pnpm lint", Description: "Lint", Start: start, End: now, Status: "completed", ExitCode: new(int)}},
+	}, {
+		Agent: opencode.Agent, ID: "ses_e5d6a7280ffeAGHDhLXBM7GBFI", Title: "Add opencode support", Cwd: `C:\code\agentbox`,
+		Model: "deepseek-v4.1-flash-free", Entrypoint: "opencode", Resume: "opencode --session ses_e5d6a7280ffeAGHDhLXBM7GBFI",
+		StartedAt: start, LastActivity: now, ModTime: now, Prompts: 1, Turns: 6,
+		ToolCounts: map[string]int{"shell": 3, "read": 2},
+		Execs: []*claude.Exec{
+			{ToolUseID: "call_1", Tool: "shell", Command: "go build ./...", Start: start, End: now, Output: "ok"},
+			{ToolUseID: "call_2", Tool: "shell", Command: "go test ./...", Start: start, End: now, IsError: true,
+				Output: "Exit code 1\n\nFAIL agentbox/internal/opencode"},
+			{ToolUseID: "call_3", Tool: "shell", Command: "npm run dev", Description: "Dev server", Start: start,
+				End: start.Add(time.Second), TaskID: "sh_1", Background: true},
+		},
+		Tasks: []*claude.Task{{ID: "sh_1", Command: "npm run dev", Description: "Dev server", Start: start, End: now,
+			Status: "completed", ExitCode: new(int)}},
 	}}
 	m.reselect()
+	// Output carries a command's own colour, and one line is long enough to
+	// wrap, so the layout tests exercise both.
+	m.preview = previewState{lines: []string{
+		sanitize("\x1b[32mok\x1b[0m\tagentbox/internal/tui"),
+		sanitize("\x1b[1;31mFAIL\x1b[0m agentbox/internal/store\t0.12s"),
+		sanitize("\x1b[34m" + strings.Repeat("coloured and unbroken ", 40) + "\x1b[0m"),
+	}}
 	return m
 }
 
@@ -68,17 +90,21 @@ func TestViewFitsTerminal(t *testing.T) {
 	sizes := [][2]int{{40, 10}, {80, 24}, {99, 30}, {100, 30}, {160, 45}, {220, 60}}
 	for _, sz := range sizes {
 		screens := map[string]func(m *model){
-			"runs":    func(m *model) {},
-			"claude":  func(m *model) { m.switchTab(tabClaude) },
-			"session": func(m *model) { m.switchTab(tabClaude); m.open() },
-			"task":    func(m *model) { m.switchTab(tabClaude); m.open(); m.open() },
-			"command": func(m *model) { m.switchTab(tabClaude); m.open(); m.move(1) },
-			"abcall":  func(m *model) { m.switchTab(tabClaude); m.open(); m.move(4) },
-			"agy":     func(m *model) { m.switchTab(tabAgy) },
-			"agyses":  func(m *model) { m.switchTab(tabAgy); m.open() },
-			"agycmd":  func(m *model) { m.switchTab(tabAgy); m.open(); m.move(1) },
-			"noagy":   func(m *model) { m.sessions = m.sessions[:1]; m.switchTab(tabAgy) },
-			"range":   func(m *model) { m.switchTab(tabAgy); m.openInput("range", "12h, 14d, 2w, 3mo, 1y or all", "7d") },
+			"runs":     func(m *model) {},
+			"claude":   func(m *model) { m.switchTab(tabClaude) },
+			"session":  func(m *model) { m.switchTab(tabClaude); m.open() },
+			"task":     func(m *model) { m.switchTab(tabClaude); m.open(); m.open() },
+			"command":  func(m *model) { m.switchTab(tabClaude); m.open(); m.move(1) },
+			"abcall":   func(m *model) { m.switchTab(tabClaude); m.open(); m.move(4) },
+			"agy":      func(m *model) { m.switchTab(tabAgy) },
+			"agyses":   func(m *model) { m.switchTab(tabAgy); m.open() },
+			"agycmd":   func(m *model) { m.switchTab(tabAgy); m.open(); m.move(1) },
+			"noagy":    func(m *model) { m.sessions = m.sessions[:1]; m.switchTab(tabAgy) },
+			"opencode": func(m *model) { m.switchTab(tabOpenCode) },
+			"ocses":    func(m *model) { m.switchTab(tabOpenCode); m.open() },
+			"occmd":    func(m *model) { m.switchTab(tabOpenCode); m.open(); m.move(1) },
+			"nooc":     func(m *model) { m.sessions = m.sessions[:2]; m.switchTab(tabOpenCode) },
+			"range":    func(m *model) { m.switchTab(tabAgy); m.openInput("range", "12h, 14d, 2w, 3mo, 1y or all", "7d") },
 			"rangeall": func(m *model) {
 				m.switchTab(tabClaude)
 				m.sessionRange = allTime
@@ -114,17 +140,37 @@ func TestViewFitsTerminal(t *testing.T) {
 	}
 }
 
+func TestOutputKeepsColor(t *testing.T) {
+	m := fixture(t)
+	m.w, m.h = 160, 45
+	out := m.View()
+	if !strings.Contains(out, "\x1b[32mok") {
+		t.Errorf("output lost its colour:\n%s", ansi.Strip(out))
+	}
+	if strings.Contains(out, "\x1b[2J") {
+		t.Error("a screen-clearing code survived into the view")
+	}
+}
+
 func TestSanitize(t *testing.T) {
 	cases := map[string]string{
-		"\x1b[31mred\x1b[0m": "red",
-		"10%\r50%\r100%":     "100%",
-		"done\r":             "done",
-		"a\tb":               "a   b",
-		"bell\x07":           "bell",
+		"\x1b[31mred\x1b[0m":     "\x1b[31mred\x1b[0m", // colour survives
+		"\x1b[31mred":            "\x1b[31mred\x1b[0m", // and is closed
+		"\x1b[2Jclear":           "clear",              // cursor/screen codes go
+		"\x1b[?25lhide\x1b[?25h": "hide",
+		"\x1b]8;;https://example.com\x07x\x1b]8;;\x07": "x", // OSC hyperlink goes
+		"\x1b[32mok\x1b[0m\tdone":                      "\x1b[32mok\x1b[0m  done\x1b[0m",
+		"10%\r50%\r100%":                               "100%",
+		"done\r":                                       "done",
+		"a\tb":                                         "a   b",
+		"bell\x07":                                     "bell",
 	}
 	for in, want := range cases {
 		if got := sanitize(in); got != want {
 			t.Errorf("sanitize(%q) = %q, want %q", in, got, want)
 		}
+	}
+	if got := plain("\x1b[31mred\x1b[0m"); got != "red" {
+		t.Errorf("plain() = %q, want %q", got, "red")
 	}
 }

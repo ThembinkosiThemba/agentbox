@@ -125,15 +125,25 @@ agentbox prune [--older-than 24h]
 agentbox sessions [id] [--days 3] [--json]
 ```
 
-Lists Claude Code and Antigravity CLI sessions active within `--days` (default 3, `0` for all): active state, id, agent, last activity, number of commands, background tasks, project and title. Give a session id (or a prefix of it) to list that session's background tasks and recent commands instead.
+Lists Claude Code, Antigravity CLI and OpenCode sessions active within `--days` (default 3, `0` for all): active state, id, agent, last activity, number of commands, background tasks, project and title. Give a session id (or a prefix of it) to list that session's background tasks and recent commands instead.
 
 ## guide
 
 ```
-agentbox guide
+agentbox guide [--install|--remove] [--project] [--agent names] [--all]
 ```
 
-Prints instructions for coding agents, ready to add to `CLAUDE.md`, `GEMINI.md` or `AGENTS.md`. See [Using agentbox with coding agents](agents.md).
+Prints instructions for coding agents. With `--install`, writes them into the files each agent reads, inside `<!-- agentbox:begin -->` / `<!-- agentbox:end -->` markers so a later run updates the block instead of duplicating it. `--remove` takes the block out again.
+
+| Flag | Description |
+| --- | --- |
+| `--install` | Write the guide into agent instruction files |
+| `--remove` | Remove the guide from agent instruction files |
+| `--project` | Use files in the current project instead of user-wide files |
+| `--agent <names>` | Only these agents, comma-separated: `claude`, `antigravity` (`agy`), `opencode`, `codex` |
+| `--all` | Include every supported agent, not only those found on this machine |
+
+Without `--agent`, `--install` only touches agents whose config directory already exists, while `--remove` checks every agent. User-wide files are `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.config/opencode/AGENTS.md` and `~/.codex/AGENTS.md`; project files are `CLAUDE.md`, `GEMINI.md` and `AGENTS.md`. See [Using agentbox with coding agents](agents.md).
 
 ## shortcut
 

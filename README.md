@@ -42,7 +42,7 @@ Open the dashboard:
 agentbox
 ```
 
-Claude Code and Antigravity CLI (`agy`) sessions on this machine show up in the **Claude** and **Agy** tabs automatically, with every command they ran and every background task. No setup needed.
+Claude Code, Antigravity CLI (`agy`) and OpenCode sessions on this machine show up in the **Claude**, **Agy** and **OpenCode** tabs automatically, with every command they ran and every background task. No setup needed.
 
 Run something through agentbox, and it appears in the **Runs** tab:
 
@@ -57,7 +57,7 @@ Pin it to your taskbar: the installers add agentbox to the Start menu (or your L
 Have your agents use agentbox for long-running commands:
 
 ```sh
-agentbox guide >> ~/.claude/CLAUDE.md   # or a project's CLAUDE.md / GEMINI.md / AGENTS.md
+agentbox guide --install   # add the instructions to the agents on this machine
 ```
 
 ## Documentation

@@ -200,7 +200,7 @@ var reExitLine = regexp.MustCompile(`^Exit code (-?\d+)$`)
 func errorLine(out string) string {
 	code := ""
 	for _, l := range strings.Split(out, "\n") {
-		l = strings.TrimSpace(sanitize(l))
+		l = strings.TrimSpace(plain(l))
 		if l == "" {
 			continue
 		}
@@ -229,7 +229,7 @@ func (m *model) cmdLine(at time.Time, glyph string, c lipgloss.TerminalColor, ba
 	}
 	room := w - width(left) - width(dur) - 1
 	t := trunc(title, room)
-	line := left + sText.Render(t)
+	line := left + fg(c).Render(t)
 	if hint != "" && room-width(t) > 8 {
 		line += sFaint.Render("  " + trunc(hint, room-width(t)-2))
 	}

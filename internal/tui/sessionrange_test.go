@@ -143,6 +143,8 @@ func TestRangeReachesScanner(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("OPENCODE_DB", "")
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 
 	logs := filepath.Join(agy.DataDir(), "brain", "old-session", ".system_generated", "logs")

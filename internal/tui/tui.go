@@ -12,9 +12,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
+	"github.com/muesli/termenv"
 
 	"agentbox/internal/agy"
 	"agentbox/internal/claude"
+	"agentbox/internal/opencode"
 	"agentbox/internal/store"
 	"agentbox/internal/supervisor"
 )
@@ -25,9 +29,26 @@ type Hooks struct {
 }
 
 func Run(st *store.Store, hooks Hooks) error {
+	ensureColor()
 	p := tea.NewProgram(newModel(st, hooks), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
+}
+
+// ensureColor keeps the dashboard coloured on terminals that do not say what
+// they support — a Windows console often leaves TERM unset, which lipgloss
+// reads as "no colour" and renders everything white. On a real terminal with
+// no detected colour, 256 colours is the safe ask. NO_COLOR still wins.
+func ensureColor() {
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("AGENTBOX_NO_COLOR") != "" {
+		return
+	}
+	if !isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd()) {
+		return
+	}
+	if lipgloss.ColorProfile() == termenv.Ascii {
+		lipgloss.SetColorProfile(termenv.ANSI256)
+	}
 }
 
 type tab int
@@ -36,6 +57,7 @@ const (
 	tabRuns tab = iota
 	tabClaude
 	tabAgy
+	tabOpenCode
 	tabCount
 )
 
@@ -65,6 +87,7 @@ type model struct {
 	st      *store.Store
 	scanner *claude.Scanner
 	agy     *agy.Scanner
+	oc      *opencode.Scanner
 	hooks   Hooks
 	cwd     string
 
@@ -154,7 +177,7 @@ func newModel(st *store.Store, hooks Hooks) *model {
 	in.TextStyle = sText
 	in.PlaceholderStyle = sFaint
 	in.Cursor.Style = sAccent
-	m := &model{st: st, scanner: claude.NewScanner(), agy: agy.NewScanner(), hooks: hooks, cwd: cwd, now: time.Now(), input: in}
+	m := &model{st: st, scanner: claude.NewScanner(), agy: agy.NewScanner(), oc: opencode.NewScanner(), hooks: hooks, cwd: cwd, now: time.Now(), input: in}
 	m.sessionRange = m.loadSessionRange()
 	return m
 }
@@ -169,12 +192,14 @@ func frameTick() tea.Cmd {
 
 func (m *model) load(tick bool) tea.Cmd {
 	m.loading = true
-	st, sc, ag, window := m.st, m.scanner, m.agy, m.sessionRange
+	st, sc, ag, oc, window := m.st, m.scanner, m.agy, m.oc, m.sessionRange
 	return func() tea.Msg {
 		runs, _ := st.List()
 		sessions, _ := sc.Scan(scanAge(window), 0)
 		agySessions, _ := ag.Scan(scanAge(window), 0)
+		ocSessions, _ := oc.Scan(scanAge(window), 0)
 		sessions = append(sessions, agySessions...)
+		sessions = append(sessions, ocSessions...)
 		return dataMsg{runs: runs, sessions: sessions, live: claude.LiveProcesses(), tick: tick, sessionRange: window}
 	}
 }
@@ -313,6 +338,8 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.switchTab(tabClaude)
 	case "3":
 		m.switchTab(tabAgy)
+	case "4":
+		m.switchTab(tabOpenCode)
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -657,8 +684,11 @@ func (m *model) visibleRuns() []*store.Run {
 
 func (m *model) visibleSessions() []*claude.Session {
 	agent := claude.Agent
-	if m.tab == tabAgy {
+	switch m.tab {
+	case tabAgy:
 		agent = agy.Agent
+	case tabOpenCode:
+		agent = opencode.Agent
 	}
 	out := make([]*claude.Session, 0, len(m.sessions))
 	for _, s := range m.sessions {

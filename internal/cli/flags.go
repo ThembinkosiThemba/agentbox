@@ -54,6 +54,25 @@ func (f *flagSet) durationVar(def time.Duration, usage string, names ...string) 
 	return p
 }
 
+// stringList collects a flag that may be repeated, e.g. --agent claude
+// --agent opencode.
+type stringList []string
+
+func (s *stringList) String() string { return strings.Join(*s, ",") }
+
+func (s *stringList) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
+func (f *flagSet) stringsVar(usage string, names ...string) *[]string {
+	p := new([]string)
+	for _, n := range names {
+		f.Var((*stringList)(p), n, usage)
+	}
+	return p
+}
+
 // Parse accepts flags anywhere among the positional arguments.
 func (f *flagSet) Parse(args []string) error {
 	f.pos = nil

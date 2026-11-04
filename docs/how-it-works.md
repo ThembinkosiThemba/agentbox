@@ -76,3 +76,11 @@ The Agy tab and `agentbox sessions` read the transcripts `agy` keeps at `~/.gemi
 Titles come from `annotations/<conversation>.pbtxt` and `cache/conversation_metadata.json`, and the project directory from that cache or `cache/last_conversations.json`. These files cover only some conversations, so agentbox falls back to the first prompt and the directory of the first command.
 
 agentbox never writes to any of agy's files.
+
+## OpenCode sessions
+
+The OpenCode tab and `agentbox sessions` read OpenCode's SQLite database, `~/.local/share/opencode/opencode.db` (or under `$XDG_DATA_HOME`, or wherever `OPENCODE_DB` points). `session_v2` rows give each session's title, directory, model, client version, token usage and cost; `session_message` rows give its prompts, turns, tool calls and background shells.
+
+Unlike a transcript, the database is updated in place: a message is rewritten as its tool calls start and finish. agentbox keeps what it parsed for each session and re-reads only messages whose `time_updated` changed, then rebuilds that session's totals from them, so a rewritten message is never counted twice.
+
+Agentbox opens the database read-only and never writes to it. Child sessions (subagents) and archived sessions are skipped.

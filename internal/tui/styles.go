@@ -42,6 +42,7 @@ var (
 	sBlue    = lipgloss.NewStyle().Foreground(cBlue)
 	sBorder  = lipgloss.NewStyle().Foreground(cBorder)
 	sKey     = lipgloss.NewStyle().Foreground(cText).Bold(true)
+	sCmd     = lipgloss.NewStyle().Foreground(cCyan)
 	sSelBg   = lipgloss.NewStyle().Background(cSelBg)
 	sLogo    = lipgloss.NewStyle().Foreground(cOnColor).Background(cAccent).Bold(true).Padding(0, 1)
 	sTabOn   = lipgloss.NewStyle().Foreground(cAccent).Bold(true)

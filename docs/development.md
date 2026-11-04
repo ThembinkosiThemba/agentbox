@@ -28,11 +28,13 @@ GOOS=darwin go vet ./...
 | --- | --- |
 | `main.go` | Entry point; hands off to `internal/cli` |
 | `internal/cli` | Command parsing and output |
+| `internal/guide` | `agentbox guide`: the agent instructions and installing them into agent files |
 | `internal/store` | Run records on disk: `meta.json`, logs, heartbeats, kill markers |
 | `internal/supervisor` | The run lifecycle: create, spawn detached, supervise, kill |
 | `internal/proc` | Platform process handling: Job Objects on Windows, process groups elsewhere |
 | `internal/claude` | Read-only, incremental parser for Claude Code transcripts |
 | `internal/agy` | Read-only, incremental parser for Antigravity CLI transcripts |
+| `internal/opencode` | Read-only, incremental reader for OpenCode's session database |
 | `internal/tui` | The dashboard (Bubble Tea and Lip Gloss) |
 | `internal/human` | Formatting of durations, times and sizes |
 | `internal/launcher` | `agentbox shortcut`: Start menu shortcut, Linux desktop entry, macOS `.command` |

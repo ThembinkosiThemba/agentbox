@@ -112,7 +112,8 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestAttribute(t *testing.T) {
-	for _, v := range []string{"AGENTBOX_AGENT", "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID", "ANTIGRAVITY_CONVERSATION_ID", "AI_AGENT"} {
+	for _, v := range []string{"AGENTBOX_AGENT", "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID",
+		"ANTIGRAVITY_CONVERSATION_ID", "OPENCODE", "OPENCODE_SESSION_ID", "AI_AGENT"} {
 		t.Setenv(v, "")
 	}
 	r := &store.Run{}
@@ -127,6 +128,25 @@ func TestAttribute(t *testing.T) {
 	if r.Agent != "antigravity" || r.SessionID != "41fec8a8" {
 		t.Errorf("agy: Agent, SessionID = %q, %q", r.Agent, r.SessionID)
 	}
+	t.Setenv("ANTIGRAVITY_CONVERSATION_ID", "")
+
+	t.Setenv("OPENCODE_SESSION_ID", "ses_1")
+	r = &store.Run{}
+	attribute(r)
+	if r.Agent != "opencode" || r.SessionID != "ses_1" {
+		t.Errorf("opencode: Agent, SessionID = %q, %q", r.Agent, r.SessionID)
+	}
+	t.Setenv("OPENCODE_SESSION_ID", "")
+
+	// OpenCode also exports OPENCODE=1, so a run started from it is still
+	// recognised when the session id is not set.
+	t.Setenv("OPENCODE", "1")
+	r = &store.Run{}
+	attribute(r)
+	if r.Agent != "opencode" || r.SessionID != "" {
+		t.Errorf("opencode without session: Agent, SessionID = %q, %q", r.Agent, r.SessionID)
+	}
+	t.Setenv("OPENCODE", "")
 
 	t.Setenv("AGENTBOX_AGENT", "mine")
 	r = &store.Run{}
