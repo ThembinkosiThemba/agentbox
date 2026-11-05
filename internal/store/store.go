@@ -46,6 +46,9 @@ const (
 	LostAfter         = 15 * time.Second
 )
 
+// DefaultAge is how far back runs and sessions are listed by default.
+const DefaultAge = 7 * 24 * time.Hour
+
 type Run struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
@@ -115,6 +118,19 @@ func (r *Run) Duration(now time.Time) time.Duration {
 		end = *r.EndedAt
 	}
 	return end.Sub(*r.StartedAt)
+}
+
+// Within reports whether a listing reaching back age should show r. A run that
+// hasn't finished always shows, however long ago it started.
+func (r *Run) Within(age time.Duration, now time.Time) bool {
+	if !r.Status.Terminal() {
+		return true
+	}
+	last := r.CreatedAt
+	if r.EndedAt != nil {
+		last = *r.EndedAt
+	}
+	return now.Sub(last) <= age
 }
 
 // Home returns the agentbox state directory, creating it if needed.

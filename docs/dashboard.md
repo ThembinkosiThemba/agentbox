@@ -10,7 +10,7 @@ The header shows the tabs and, on the right:
 
 ## Runs tab
 
-Every command started through `agentbox run`, with running ones first. Each row shows status, the run's title (or name, or command), duration, then its id, name, project folder and command, who launched it and when. A failed run shows its exit code in red instead.
+Commands started through `agentbox run` within the [range](#range), with running ones first. A run that is still going is always listed. Each row shows status, the run's title (or name, or command), duration, then its id, name, project folder and command, who launched it and when. A failed run shows its exit code in red instead.
 
 The details pane for the selected run shows:
 
@@ -35,7 +35,7 @@ Press `Enter` to open the output full screen.
 
 ## Claude tab
 
-Claude Code sessions within the [session range](#session-range), read from `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR`). A session is **active** (●) if its transcript changed in the last 2 minutes. Active sessions are listed first.
+Claude Code sessions within the [range](#range), read from `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR`). A session is **active** (●) if its transcript changed in the last 2 minutes. Active sessions are listed first.
 
 The summary pane shows:
 
@@ -60,7 +60,7 @@ This tab only reads Claude Code's files. It never changes them.
 
 ## Agy tab
 
-Antigravity CLI (`agy`) sessions within the [session range](#session-range), read from `~/.gemini/antigravity-cli`. It works like the Claude tab, with the same summary, command list and background tasks, and it only reads agy's files.
+Antigravity CLI (`agy`) sessions within the [range](#range), read from `~/.gemini/antigravity-cli`. It works like the Claude tab, with the same summary, command list and background tasks, and it only reads agy's files.
 
 agy records less than Claude Code, so a few things differ:
 
@@ -71,7 +71,7 @@ agy records less than Claude Code, so a few things differ:
 
 ## OpenCode tab
 
-OpenCode sessions within the [session range](#session-range), read from its SQLite database at `~/.local/share/opencode/opencode.db` (or under `$XDG_DATA_HOME`; `OPENCODE_DB` points elsewhere). It works like the Claude tab, with the same summary, command list and background tasks, and it only reads OpenCode's database.
+OpenCode sessions within the [range](#range), read from its SQLite database at `~/.local/share/opencode/opencode.db` (or under `$XDG_DATA_HOME`; `OPENCODE_DB` points elsewhere). It works like the Claude tab, with the same summary, command list and background tasks, and it only reads OpenCode's database.
 
 OpenCode records less than Claude Code, so a few things differ:
 
@@ -81,14 +81,14 @@ OpenCode records less than Claude Code, so a few things differ:
 - background shells are matched to their completion notice by shell id, and the task's output is read from OpenCode's `shell` directory
 - OpenCode's processes aren't counted in the header's **live** figure. Its sessions do count as **active**
 
-## Session range
+## Range
 
-The Claude, Agy and OpenCode tabs show sessions active within a range, named in the list's title. It starts at the last 7 days. The Runs tab has no range: it always shows every run.
+Every tab shows what was active within a range, named in the list's title. It starts at the last 7 days.
 
 - `t` moves to the next range: 1d, 3d, 7d, 30d, 90d, then all time.
 - `T` lets you type one: `45m`, `12h`, `14d`, `2w`, `3mo`, `1y` or `all`. A bare number means days.
 
-Your choice applies to all three tabs and is remembered in `dashboard.json` in the agentbox home. The first scan of a wide range reads every transcript in it, so it can take a moment.
+Your choice applies to every tab and is remembered in `dashboard.json` in the agentbox home. The first scan of a wide range reads every transcript in it, so it can take a moment.
 
 ## Keys
 
@@ -99,7 +99,7 @@ Your choice applies to all three tabs and is remembered in `dashboard.json` in t
 | `PgUp` `PgDn` · `g` `G` | Page · first · last |
 | click a row | Select it; click again to open |
 | `Enter` | Open: full-screen log, session details, task output |
-| `t` · `T` | Claude, Agy and OpenCode tabs: next session range · type a custom one |
+| `t` · `T` | Next range · type a custom one |
 | `Esc` · `←` | Back, or clear the filter |
 | `/` | Filter the current list (matches ids, names, commands, paths, titles) |
 | `?` | Show all keys |
@@ -124,4 +124,6 @@ Your choice applies to all three tabs and is remembered in `dashboard.json` in t
 | `w` | Toggle line wrapping |
 | `x` · `r` | Stop · restart (agentbox runs only) |
 
-Output keeps the colours the command wrote. Other escape codes — cursor movement, screen clears, hyperlinks — are removed, and progress bars that redraw with `\r` show only their latest state. A run's output goes to a log file rather than a terminal, so agentbox starts commands with colour forced on (`FORCE_COLOR`, `CLICOLOR_FORCE`, `COLORTERM`, and a `TERM` when none is set); set `NO_COLOR=1` (or `AGENTBOX_NO_COLOR=1`) to turn that off.
+Output keeps the colours the command wrote. Other escape codes — cursor movement, screen clears, hyperlinks — are removed, and progress bars that redraw with `\r` show only their latest state. A run's output goes to a log file rather than a terminal, so agentbox starts commands with colour forced on (`FORCE_COLOR`, `CLICOLOR_FORCE`, `COLORTERM`, `CARGO_TERM_COLOR`, `PY_COLORS` and a few more, plus a `TERM` when none is set). A tool that only looks at whether it is writing to a terminal and has no such setting, like `git` or `ls --color=auto`, stays plain.
+
+Logs keep colour even when `NO_COLOR` is set, because agents often set it for their own shell. `NO_COLOR=1` still hides colour wherever you view the output: the dashboard, `agentbox logs` and a foreground `agentbox run`. To start a command without forced colour, set `AGENTBOX_NO_COLOR=1`.

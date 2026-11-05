@@ -53,7 +53,7 @@ agentbox run -d -- go test ./...
 agentbox ls [-a] [--json]
 ```
 
-Lists running runs plus the 20 most recent. Aliases: `ps`, `list`.
+Lists running runs plus those from the last 7 days. Aliases: `ps`, `list`.
 
 | Flag | Description |
 | --- | --- |
@@ -122,10 +122,10 @@ agentbox prune [--older-than 24h]
 ## sessions
 
 ```
-agentbox sessions [id] [--days 3] [--json]
+agentbox sessions [id] [--days 7] [--json]
 ```
 
-Lists Claude Code, Antigravity CLI and OpenCode sessions active within `--days` (default 3, `0` for all): active state, id, agent, last activity, number of commands, background tasks, project and title. Give a session id (or a prefix of it) to list that session's background tasks and recent commands instead.
+Lists Claude Code, Antigravity CLI and OpenCode sessions active within `--days` (default 7, `0` for all): active state, id, agent, last activity, number of commands, background tasks, project and title. Give a session id (or a prefix of it) to list that session's background tasks and recent commands instead.
 
 ## guide
 

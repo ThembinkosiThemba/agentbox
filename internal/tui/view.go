@@ -50,10 +50,13 @@ func (m *model) View() string {
 // ---- header & footer ----
 
 func (m *model) viewHeader() string {
-	running := 0
+	running, listed := 0, 0
 	for _, r := range m.runs {
 		if !r.Status.Terminal() {
 			running++
+		}
+		if m.inRange(r) {
+			listed++
 		}
 	}
 	active, tasks := 0, 0
@@ -84,7 +87,7 @@ func (m *model) viewHeader() string {
 	left := logo
 	x := width(logo)
 	for i, label := range []string{
-		tabRuns:     tabLabel(tabRuns, "Runs", len(m.runs)),
+		tabRuns:     tabLabel(tabRuns, "Runs", listed),
 		tabClaude:   tabLabel(tabClaude, "Claude", len(m.sessions)-agySessions-ocSessions),
 		tabAgy:      tabLabel(tabAgy, "Agy", agySessions),
 		tabOpenCode: tabLabel(tabOpenCode, "OpenCode", ocSessions),
@@ -223,7 +226,7 @@ func (m *model) viewRuns(w, h int) string {
 	if len(runs) > 0 {
 		count = fmt.Sprintf("%d/%d", m.runSel+1, len(runs))
 	}
-	left := panel("Runs", count, listLines, lw, lh, true)
+	left := panel("Runs · "+rangeLabel(m.sessionRange), count, listLines, lw, lh, true)
 
 	var detail []string
 	title := "Details"
@@ -245,6 +248,9 @@ func (m *model) runsEmpty(w, h int) []string {
 		sMuted.Render("or press ") + sKey.Render("n") + sMuted.Render(" to start one here."),
 		"",
 		sFaint.Render("agentbox guide  → instructions for agents"),
+	}
+	if len(m.runs) > 0 {
+		lines = []string{sBold.Render("No runs"), sMuted.Render(rangeLabel(m.sessionRange)), "", sMuted.Render("Press t for a longer range")}
 	}
 	if m.filter != "" {
 		lines = []string{sMuted.Render("No runs match “" + m.filter + "”")}
@@ -745,7 +751,7 @@ func (m *model) viewHelp() string {
 		{"Everywhere", []kv{{"← → · tab", "switch between tabs"}, {"↑↓ · j k", "move"}, {"g · G", "first · last"},
 			{"enter", "open"}, {"esc", "back / clear filter"}, {"/", "filter"}, {"q", "quit"}}},
 		{"Runs", []kv{{"n", "start a command here"}, {"x", "stop the run and its process tree"}, {"r", "restart"}, {"d", "delete"}}},
-		{"Sessions", []kv{{"t", "next range: 1d, 3d, 7d, 30d, 90d, all"}, {"T", "type a range: 12h, 14d, 2w, 3mo, 1y, all"}}},
+		{"Range", []kv{{"t", "next range: 1d, 3d, 7d, 30d, 90d, all"}, {"T", "type a range: 12h, 14d, 2w, 3mo, 1y, all"}}},
 		{"Logs", []kv{{"f", "follow output"}, {"w", "wrap lines"}, {"PgUp PgDn", "page"}}},
 	}
 	var lines []string

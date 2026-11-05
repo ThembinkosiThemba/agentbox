@@ -202,6 +202,9 @@ func center(lines []string, w, h int) []string {
 	return out
 }
 
+// stripOutput drops a command's colours from what sanitize returns.
+var stripOutput bool
+
 // sanitize makes raw process output safe to draw: colour (SGR) codes are
 // kept so a command's own colours survive, every other escape sequence and
 // control character is dropped, carriage-return progress bars keep their
@@ -247,6 +250,9 @@ func sanitize(s string) string {
 			}
 		}
 		s = b.String()
+	}
+	if stripOutput {
+		return ansi.Strip(s)
 	}
 	return seal(s)
 }

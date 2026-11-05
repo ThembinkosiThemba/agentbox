@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"agentbox/internal/agy"
+	"agentbox/internal/store"
 )
 
 func TestParseRange(t *testing.T) {
@@ -76,18 +77,41 @@ func press(m *model, key string) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
 }
 
+func TestRunsFollowTheRange(t *testing.T) {
+	m := fixture(t)
+	old := m.now.Add(-8 * day)
+	m.runs = append(m.runs,
+		&store.Run{ID: "oldone", Status: store.StatusSucceeded, CreatedAt: old, EndedAt: &old},
+		&store.Run{ID: "oldrun", Status: store.StatusRunning, CreatedAt: old})
+	shown := func() map[string]bool {
+		ids := map[string]bool{}
+		for _, r := range m.visibleRuns() {
+			ids[r.ID] = true
+		}
+		return ids
+	}
+
+	if got := shown(); got["oldone"] || !got["oldrun"] || !got["a8b2c1"] {
+		t.Errorf("7d: %v, want the finished old run hidden and the running one kept", got)
+	}
+	m.sessionRange = allTime
+	if got := shown(); !got["oldone"] {
+		t.Errorf("all time: %v, want every run", got)
+	}
+}
+
 func TestRangeKeys(t *testing.T) {
 	m := fixture(t)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 
-	press(m, "t") // not on the Runs tab: it has no range
-	if m.sessionRange != defaultRange {
-		t.Errorf("t on Runs: range = %v", m.sessionRange)
+	press(m, "t") // the Runs tab shares the range
+	if m.sessionRange != 30*day {
+		t.Errorf("t on Runs: range = %v, want 30d", m.sessionRange)
 	}
 	m.switchTab(tabAgy)
 	press(m, "t")
-	if m.sessionRange != 30*day {
-		t.Errorf("t: range = %v, want 30d", m.sessionRange)
+	if m.sessionRange != 90*day {
+		t.Errorf("t: range = %v, want 90d", m.sessionRange)
 	}
 
 	press(m, "T")

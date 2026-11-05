@@ -19,7 +19,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/mattn/go-isatty"
 
 	"agentbox/internal/agy"
 	"agentbox/internal/claude"
@@ -64,7 +63,7 @@ func init() {
 		{"restart", nil, "<id>", "Start a run's command again, detached", cmdRestart},
 		{"rm", nil, "[-f] <id>...", "Delete finished runs", cmdRm},
 		{"prune", nil, "[--older-than 24h]", "Delete all finished runs", cmdPrune},
-		{"sessions", nil, "[id] [--json] [--days 3]", "List Claude Code, Antigravity and OpenCode sessions, or show one", cmdSessions},
+		{"sessions", nil, "[id] [--json] [--days 7]", "List Claude Code, Antigravity and OpenCode sessions, or show one", cmdSessions},
 		{"guide", nil, "[--install|--remove] [--project] [--agent names]", "Print or install instructions for coding agents", cmdGuide},
 		{"shortcut", nil, "[--desktop] [--remove]", "Add agentbox to the Start menu / app launcher, to pin it", cmdShortcut},
 		{"tui", []string{"ui"}, "", "Open the dashboard (default with no command)", cmdTUI},
@@ -207,7 +206,7 @@ func reportStarted(r *store.Run, quiet, asJSON bool) int {
 
 func cmdList(st *store.Store, args []string) int {
 	fs := newFlags("ls")
-	all := fs.boolVar(false, "Show all runs (default: running plus the 20 most recent)", "a", "all")
+	all := fs.boolVar(false, "Show all runs (default: running plus the last 7 days)", "a", "all")
 	asJSON := fs.boolVar(false, "Print JSON", "json")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -216,13 +215,16 @@ func cmdList(st *store.Store, args []string) int {
 	if err != nil {
 		return die(err)
 	}
+	now := time.Now()
+	hidden := 0
 	if !*all {
 		var keep []*store.Run
-		for i, r := range runs {
-			if !r.Status.Terminal() || i < 20 {
+		for _, r := range runs {
+			if r.Within(store.DefaultAge, now) {
 				keep = append(keep, r)
 			}
 		}
+		hidden = len(runs) - len(keep)
 		runs = keep
 	}
 	if *asJSON {
@@ -230,10 +232,13 @@ func cmdList(st *store.Store, args []string) int {
 		return 0
 	}
 	if len(runs) == 0 {
+		if hidden > 0 {
+			fmt.Println(dim("No runs in the last 7 days. See older ones with: agentbox ls -a"))
+			return 0
+		}
 		fmt.Println(dim("No runs yet. Start one with: agentbox run -d -- <command>"))
 		return 0
 	}
-	now := time.Now()
 	var rows [][]string
 	for _, r := range runs {
 		by := r.Agent
@@ -343,12 +348,12 @@ func copyFrom(path string, offset int64) int64 {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return offset
 	}
-	if stdoutIsTTY() {
+	if supervisor.ShowColor(os.Stdout) {
 		n, _ := io.Copy(os.Stdout, f)
 		return offset + n
 	}
 	// The log carries the command's colours; strip them when our own output
-	// is piped, where the CLI promises plain text.
+	// is piped, where the CLI promises plain text, or NO_COLOR is set.
 	br := bufio.NewReader(f)
 	var n int64
 	for {
@@ -364,16 +369,12 @@ func copyFrom(path string, offset int64) int64 {
 }
 
 // printLogLine prints one line of a run's output, plainly when stdout is
-// not a terminal.
+// not a terminal or NO_COLOR is set.
 func printLogLine(line string) {
-	if !stdoutIsTTY() {
+	if !supervisor.ShowColor(os.Stdout) {
 		line = ansi.Strip(line)
 	}
 	fmt.Println(line)
-}
-
-func stdoutIsTTY() bool {
-	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
 }
 
 func cmdWait(st *store.Store, args []string) int {
@@ -539,7 +540,7 @@ func cmdPrune(st *store.Store, args []string) int {
 func cmdSessions(_ *store.Store, args []string) int {
 	fs := newFlags("sessions")
 	asJSON := fs.boolVar(false, "Print JSON", "json")
-	days := fs.intVar(3, "Include sessions active within this many days (0 for all)", "days")
+	days := fs.intVar(int(store.DefaultAge/(24*time.Hour)), "Include sessions active within this many days (0 for all)", "days")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

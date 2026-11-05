@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -67,13 +68,19 @@ func Create(st *store.Store, o Options) (*store.Run, error) {
 
 // childEnv is the environment a run's command starts with. The child writes
 // to a log file rather than a terminal, which most tools read as "no colour";
-// these settings keep it. NO_COLOR (or AGENTBOX_NO_COLOR) turns that off, and
-// values already set are left alone so a caller can choose the level.
+// these settings keep it. AGENTBOX_NO_COLOR turns that off, and values already
+// set are left alone so a caller can choose the level. NO_COLOR is dropped:
+// agents set it for their own shell, which says nothing about what the log
+// should hold. It is honoured where the log is shown, by ShowColor.
 func childEnv() []string {
 	env := os.Environ()
-	if os.Getenv("NO_COLOR") != "" || os.Getenv("AGENTBOX_NO_COLOR") != "" {
+	if os.Getenv("AGENTBOX_NO_COLOR") != "" {
 		return env
 	}
+	env = slices.DeleteFunc(env, func(kv string) bool {
+		k, _, _ := strings.Cut(kv, "=")
+		return strings.EqualFold(k, "NO_COLOR")
+	})
 	have := make(map[string]bool, len(env))
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
@@ -88,6 +95,10 @@ func childEnv() []string {
 	add("CLICOLOR_FORCE", "1") // tools that follow the CLICOLOR convention
 	add("COLORTERM", "truecolor")
 	add("TERM", "xterm-256color")
+	add("CARGO_TERM_COLOR", "always")
+	add("PY_COLORS", "1")     // pytest, tox
+	add("PYTHON_COLORS", "1") // python's own tracebacks
+	add("DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION", "1")
 	return env
 }
 
@@ -160,14 +171,23 @@ func Supervise(st *store.Store, id string, foreground bool) (int, error) {
 	cmd.Dir = r.Cwd
 	cmd.Env = append(childEnv(), "AGENTBOX_RUN_ID="+r.ID)
 	cmd.WaitDelay = 2 * time.Second
+	var plain []*plainWriter
+	display := func(f *os.File) io.Writer {
+		if ShowColor(f) {
+			return f
+		}
+		p := &plainWriter{w: f}
+		plain = append(plain, p)
+		return p
+	}
 	if foreground {
 		// Piped input is forwarded. A terminal is not: the child sits in its
 		// own process group and would be stopped by SIGTTIN on read.
 		if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
 			cmd.Stdin = os.Stdin
 		}
-		cmd.Stdout = io.MultiWriter(logf, os.Stdout)
-		cmd.Stderr = io.MultiWriter(logf, os.Stderr)
+		cmd.Stdout = io.MultiWriter(logf, display(os.Stdout))
+		cmd.Stderr = io.MultiWriter(logf, display(os.Stderr))
 	} else {
 		cmd.Stdout, cmd.Stderr = logf, logf
 	}
@@ -242,6 +262,9 @@ loop:
 	// The run is over once its main process exits; take any stragglers it
 	// left behind down with it.
 	_ = group.Kill()
+	for _, p := range plain {
+		p.Flush()
+	}
 
 	code := cmd.ProcessState.ExitCode()
 	end := time.Now()

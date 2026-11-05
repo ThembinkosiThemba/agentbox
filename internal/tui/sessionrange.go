@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"agentbox/internal/store"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 	// allTime is the session range that hides nothing.
 	allTime time.Duration = 0
 
-	defaultRange = 7 * day
+	defaultRange = store.DefaultAge
 )
 
 // rangePresets are what `t` cycles through.

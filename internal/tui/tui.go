@@ -38,9 +38,11 @@ func Run(st *store.Store, hooks Hooks) error {
 // ensureColor keeps the dashboard coloured on terminals that do not say what
 // they support — a Windows console often leaves TERM unset, which lipgloss
 // reads as "no colour" and renders everything white. On a real terminal with
-// no detected colour, 256 colours is the safe ask. NO_COLOR still wins.
+// no detected colour, 256 colours is the safe ask. NO_COLOR still wins, for
+// the dashboard and for the output it shows.
 func ensureColor() {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("AGENTBOX_NO_COLOR") != "" {
+		stripOutput = true
 		return
 	}
 	if !isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd()) {
@@ -370,7 +372,7 @@ func (m *model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.screen == screenMain && m.tab != tabRuns {
+	if m.screen == screenMain {
 		switch k {
 		case "t":
 			return m, m.setSessionRange(nextRange(m.sessionRange))
@@ -471,8 +473,8 @@ func (m *model) keyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// setSessionRange changes how far back the session tabs reach and remembers
-// it for next time.
+// setSessionRange changes how far back every tab reaches and remembers it for
+// next time.
 func (m *model) setSessionRange(d time.Duration) tea.Cmd {
 	m.sessionRange = d
 	if err := m.saveSessionRange(); err != nil {
@@ -665,10 +667,14 @@ func (m *model) reselect() {
 
 // ---- data views ----
 
+func (m *model) inRange(r *store.Run) bool {
+	return r.Within(scanAge(m.sessionRange), m.now)
+}
+
 func (m *model) visibleRuns() []*store.Run {
 	out := make([]*store.Run, 0, len(m.runs))
 	for _, r := range m.runs {
-		if matches(m.filter, r.ID, r.Name, r.CommandLine(), r.Cwd, r.Agent, string(r.Status)) {
+		if m.inRange(r) && matches(m.filter, r.ID, r.Name, r.CommandLine(), r.Cwd, r.Agent, string(r.Status)) {
 			out = append(out, r)
 		}
 	}

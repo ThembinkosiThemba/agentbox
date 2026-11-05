@@ -236,7 +236,7 @@ agentbox wait build --timeout 8m     # block until done; exits with the command'
 agentbox logs build -n 50            # last 50 lines of output (-f to follow)
 agentbox status build                # status, exit code, duration
 agentbox kill build                  # stop it and everything it started
-agentbox ls                          # all runs
+agentbox ls                          # recent runs (-a for all)
 ` + "```" + `
 
 - A single quoted argument runs through the shell (pipes, &&, env vars work).
