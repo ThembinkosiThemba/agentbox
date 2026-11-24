@@ -41,16 +41,20 @@ agentbox guide >> AGENTS.md             # one project, Codex, OpenCode and other
 
 ## The pattern agents follow
 
+A run started with `run -d` doesn't need the agent. The agent starts it, carries on with other work and checks on it when it needs the result. It doesn't sit in `wait` straight after starting it.
+
 ```sh
 agentbox run -d --name build --title "Build the web app" -- "npm run build"
                                    # start detached; returns at once with the run id
-agentbox wait build --timeout 8m   # block until done; exits with the command's code
-agentbox logs build -n 50          # last 50 lines of output
-agentbox status build              # status, exit code, duration
+agentbox status build              # running, or done with its exit code; never blocks
+agentbox logs build -n 50          # last 50 lines of output so far
 agentbox kill build                # stop it and everything it started
+agentbox wait build --timeout 8m   # block until done; exits with the command's code
 ```
 
-- **Keep `wait --timeout` below the shell tool's limit.** If the timeout expires first, `wait` exits `75` and the run keeps going. The agent should call `wait` again, not start the command over.
+- **Don't block on a run.** Check `status` and `logs` between other steps. Use `wait` only when the next step needs the result and nothing else is left to do. Start independent runs (tests, lint, build) together rather than one after another.
+- **Get told when it finishes.** If the agent's shell tool can run a command in the background and report when it exits (Claude Code's `run_in_background`, for example), running `agentbox wait <name>` that way lets the agent hear when the run finishes without blocking.
+- **Keep `wait --timeout` below the shell tool's limit.** If the timeout expires first, `wait` exits `75` and the run keeps going. The agent should check on it again later, not start the command over.
 - **Dev servers** should be started with `run -d` and left running. You can see them in the dashboard and stop them there.
 - **Cap a runaway command** with `run --timeout 30m`. When the run hits it, the run stops and reports exit code `124`.
 - **Name runs** so they're easy to refer to later. When several runs share a name, it refers to the newest one.

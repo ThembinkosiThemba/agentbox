@@ -194,7 +194,7 @@ func reportStarted(r *store.Run, quiet, asJSON bool) int {
 			break
 		}
 		fmt.Printf("%s started (pid %d): %s\n", bold(r.ID), r.PID, r.DisplayName())
-		fmt.Println(dim(fmt.Sprintf("  agentbox wait %[1]s · agentbox logs %[1]s -f · agentbox kill %[1]s", r.ID)))
+		fmt.Println(dim(fmt.Sprintf("  runs on its own; check with agentbox status %[1]s · agentbox logs %[1]s -n 50 · agentbox wait %[1]s", r.ID)))
 	}
 	if r.Status == store.StatusFailed {
 		return exitCode(r)
@@ -391,7 +391,7 @@ func cmdWait(st *store.Store, args []string) int {
 	start := time.Now()
 	for !r.Status.Terminal() {
 		if *timeout > 0 && time.Since(start) > *timeout {
-			fmt.Fprintf(os.Stderr, "agentbox: %s still running after %s. It keeps going; run `agentbox wait %s` again.\n",
+			fmt.Fprintf(os.Stderr, "agentbox: %s still running after %s. It keeps going; check it with `agentbox status %s` or wait again.\n",
 				r.ID, human.Duration(r.Duration(time.Now())), r.ID)
 			return ExitStillRunning
 		}

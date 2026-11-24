@@ -229,20 +229,27 @@ and lets the user watch and manage them in a dashboard. Use it for any command t
 take more than about a minute (builds, test suites, installs, migrations, dev servers)
 instead of running it directly or in the background.
 
+A run started with ` + "`run -d`" + ` does not need you. Start it, then get on with other work
+(reading code, editing, starting other runs) and check on it when you need its result.
+
 ` + "```" + `sh
 agentbox run -d --name build --title "Build the web app" -- "npm run build"
-                                     # start detached; prints the run id
-agentbox wait build --timeout 8m     # block until done; exits with the command's code
-agentbox logs build -n 50            # last 50 lines of output (-f to follow)
-agentbox status build                # status, exit code, duration
-agentbox kill build                  # stop it and everything it started
+                                     # start detached; returns at once with the run id
+agentbox status build                # running, or done with its exit code; never blocks
+agentbox logs build -n 50            # last 50 lines of output so far
 agentbox ls                          # recent runs (-a for all)
+agentbox kill build                  # stop it and everything it started
+agentbox wait build --timeout 8m     # block until done; exits with the command's code
 ` + "```" + `
 
-- A single quoted argument runs through the shell (pipes, &&, env vars work).
+- Don't ` + "`wait`" + ` right after starting a run. Use ` + "`status`" + ` and ` + "`logs`" + ` between other steps,
+  and ` + "`wait`" + ` only when the next step needs the result and nothing else is left to do.
+  Start independent runs together (tests, lint, build) rather than one after another.
+- If your shell tool can run a command in the background and tell you when it exits, run
+  ` + "`agentbox wait <name>`" + ` that way to be told when the run finishes without blocking.
 - ` + "`wait`" + ` exits with the command's own code. If its --timeout expires first it exits 75
-  and the run keeps going: call ` + "`agentbox wait`" + ` again instead of restarting the command.
-  Keep --timeout below your shell tool's limit.
+  and the run keeps going: never restart the command. Keep --timeout below your shell
+  tool's limit.
 - Use ` + "`--timeout 30m`" + ` on ` + "`run`" + ` to cap how long a command may run (exit 124 when hit).
   A run that was stopped exits 137.
 - Start dev servers with ` + "`run -d`" + ` and leave them running; the user can see and stop them.
